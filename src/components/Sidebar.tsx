@@ -23,17 +23,18 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-64 bg-slate-900 text-slate-300 h-screen fixed left-0 top-0 flex flex-col border-r border-slate-800">
+    <aside className="w-64 bg-black text-slate-300 h-screen fixed left-0 top-0 flex flex-col border-r border-slate-800">
       <div className="p-6 border-b border-slate-800 flex flex-col items-center">
         {/* Logo */}
-        <div className="w-24 h-24 bg-white rounded-xl flex items-center justify-center overflow-hidden mb-4">
-            <svg viewBox="0 0 100 100" className="w-full h-full p-2">
-              <circle cx="50" cy="50" r="45" fill="black" />
-              <text x="50" y="50" textAnchor="middle" dy=".3em" fill="white" fontSize="20" fontWeight="bold">a360</text>
-            </svg>
+        <div className="w-32 h-32 flex items-center justify-center mb-2">
+            <img 
+              src="https://ative360.com/wp-content/uploads/2025/02/Logo-branca.webp" 
+              alt="ative 360" 
+              className="w-full h-full object-contain"
+              referrerPolicy="no-referrer"
+            />
         </div>
         <div className="text-center">
-          <h1 className="text-xl font-bold text-white tracking-tight">ative 360</h1>
           <p className="text-xs text-slate-500">Dashboard</p>
         </div>
       </div>
