@@ -1,0 +1,5 @@
+{
+  "name": "ClickUp Team Viewer",
+  "description": "A web application to view ClickUp team members using the ClickUp API.",
+  "requestFramePermissions": []
+}
