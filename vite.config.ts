@@ -6,6 +6,8 @@ import {defineConfig, loadEnv} from 'vite';
 import membersHandler from './api/members';
 // @ts-ignore
 import tasksHandler from './api/tasks';
+// @ts-ignore
+import hierarchyHandler from './api/hierarchy';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
@@ -27,6 +29,10 @@ export default defineConfig(({mode}) => {
           server.middlewares.use('/api/tasks', (req, res, next) => {
             // @ts-ignore
             tasksHandler(req, res).catch(next);
+          });
+          server.middlewares.use('/api/hierarchy', (req, res, next) => {
+            // @ts-ignore
+            hierarchyHandler(req, res).catch(next);
           });
         },
       }
