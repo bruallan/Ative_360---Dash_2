@@ -92,11 +92,11 @@ export default function MacroOperations() {
            clientName = clientField.value;
         }
       } else {
-        // Fallback to brackets in task name
-        const match = task.name.match(/\[(.*?)\]/);
-        if (match) {
-          clientName = match[1];
-        }
+        // Fallback to brackets removed
+        // const match = task.name.match(/\[(.*?)\]/);
+        // if (match) {
+        //   clientName = match[1];
+        // }
       }
 
       if (!clientsMap.has(clientName)) {

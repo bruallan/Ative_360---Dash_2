@@ -115,9 +115,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
              uniqueClients.add(clientField.value);
           }
         } else {
-           // Fallback to brackets
-           const match = task.name.match(/\[(.*?)\]/);
-           if (match) uniqueClients.add(match[1]);
+           // Fallback to brackets removed as per request
+           // const match = task.name.match(/\[(.*?)\]/);
+           // if (match) uniqueClients.add(match[1]);
         }
       });
 
