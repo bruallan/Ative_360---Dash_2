@@ -47,13 +47,20 @@ export default function ClientPanel() {
         body: JSON.stringify({ clientName: selectedClient, link: embedLink })
       });
       
+      const data = await res.json();
+
       if (res.ok) {
-        const data = await res.json();
-        setClientLinks(data.links);
+        // Refresh links
+        fetch('/api/client-links')
+          .then(r => r.json())
+          .then(d => setClientLinks(d));
         setIsEditingLink(false);
+      } else {
+        alert(`Erro ao salvar: ${data.error || 'Erro desconhecido'}`);
       }
     } catch (err) {
       console.error('Error saving link:', err);
+      alert('Erro ao conectar com o servidor.');
     }
   };
 
