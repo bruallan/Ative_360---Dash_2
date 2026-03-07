@@ -156,6 +156,20 @@ export default function Overview() {
           )}
         </div>
       </div>
+
+      {/* Looker Studio Embed */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <h3 className="text-lg font-semibold mb-4">Dashboard Geral</h3>
+        <div className="aspect-video w-full bg-slate-50 rounded-lg overflow-hidden border border-slate-100">
+          <iframe 
+            src="https://lookerstudio.google.com/embed/reporting/9e54cd09-d40f-4c63-a035-5e8be55b929c/page/p_zkb544482c" 
+            frameBorder="0" 
+            style={{ border: 0 }} 
+            allowFullScreen 
+            className="w-full h-full"
+          ></iframe>
+        </div>
+      </div>
     </div>
   );
 }

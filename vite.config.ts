@@ -8,6 +8,8 @@ import membersHandler from './api/members';
 import tasksHandler from './api/tasks';
 // @ts-ignore
 import hierarchyHandler from './api/hierarchy';
+// @ts-ignore
+import clientLinksHandler from './api/client-links';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
@@ -33,6 +35,10 @@ export default defineConfig(({mode}) => {
           server.middlewares.use('/api/hierarchy', (req, res, next) => {
             // @ts-ignore
             hierarchyHandler(req, res).catch(next);
+          });
+          server.middlewares.use('/api/client-links', (req, res, next) => {
+            // @ts-ignore
+            clientLinksHandler(req, res).catch(next);
           });
         },
       }

@@ -6,6 +6,11 @@ import { dirname } from 'path';
 import fs from 'fs';
 import path from 'path';
 
+// Import handlers for production server
+// Note: In a real production build, these would need to be compiled or handled differently
+// For this environment, we can import them directly if using ts-node/tsx
+import clientLinksHandler from './api/client-links.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -17,6 +22,10 @@ async function startServer() {
   app.use(express.json());
 
   // API Routes
+  app.all("/api/client-links", (req, res) => {
+    clientLinksHandler(req, res);
+  });
+
   app.get("/api/members", async (req, res) => {
     try {
       console.log("[API] Starting request to ClickUp...");
