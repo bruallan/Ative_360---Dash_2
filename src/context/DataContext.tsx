@@ -14,6 +14,7 @@ interface DataContextType {
   logs: LogEntry[];
   loading: boolean;
   fetchData: () => Promise<void>;
+  addLog: (url: string, status: number, data: any) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -135,7 +136,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
-    <DataContext.Provider value={{ tasks, clients, logs, loading, fetchData }}>
+    <DataContext.Provider value={{ tasks, clients, logs, loading, fetchData, addLog }}>
       {children}
     </DataContext.Provider>
   );

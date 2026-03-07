@@ -1,5 +1,4 @@
 import { IncomingMessage, ServerResponse } from 'http';
-import { CLICKUP_IDS } from '../src/constants'; // Import constants
 
 // Helper to get body
 const getBody = (req: IncomingMessage): Promise<any> => {
@@ -21,8 +20,8 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
   res.setHeader('Content-Type', 'application/json');
 
   const apiToken = process.env.CLICKUP_API_TOKEN;
-  // Use the constant as fallback if env var is missing
-  const configListId = process.env.CLICKUP_CONFIG_LIST_ID || CLICKUP_IDS.CONFIG_LIST_ID;
+  // Use env var or hardcoded fallback directly to avoid importing from src in serverless function
+  const configListId = process.env.CLICKUP_CONFIG_LIST_ID || '901326190559';
 
   if (!apiToken) {
     res.statusCode = 500;

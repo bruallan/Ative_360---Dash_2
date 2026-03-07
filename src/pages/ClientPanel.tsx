@@ -6,7 +6,7 @@ import { useData } from '../context/DataContext';
 import { format } from 'date-fns';
 
 export default function ClientPanel() {
-  const { tasks, clients, loading } = useData();
+  const { tasks, clients, loading, addLog } = useData();
   const [selectedClient, setSelectedClient] = useState<string>('');
   const [stats, setStats] = useState<any[]>([]);
   const [clientLinks, setClientLinks] = useState<Record<string, string>>({});
@@ -20,8 +20,18 @@ export default function ClientPanel() {
 
   useEffect(() => {
     fetch('/api/client-links')
-      .then(res => res.json())
-      .then(data => setClientLinks(data))
+      .then(async res => {
+        if (!res.ok) {
+           const text = await res.text();
+           addLog('/api/client-links', res.status, { error: text });
+           throw new Error(text);
+        }
+        return res.json();
+      })
+      .then(data => {
+        setClientLinks(data);
+        addLog('/api/client-links', 200, { action: 'fetch', count: Object.keys(data).length });
+      })
       .catch(err => console.error('Error fetching client links:', err));
   }, []);
 
@@ -47,7 +57,16 @@ export default function ClientPanel() {
         body: JSON.stringify({ clientName: selectedClient, link: embedLink })
       });
       
-      const data = await res.json();
+      const contentType = res.headers.get("content-type");
+      let data;
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        data = { error: text };
+      }
+
+      addLog('/api/client-links', res.status, { action: 'save', client: selectedClient, response: data });
 
       if (res.ok) {
         // Refresh links
@@ -55,12 +74,14 @@ export default function ClientPanel() {
           .then(r => r.json())
           .then(d => setClientLinks(d));
         setIsEditingLink(false);
+        alert('Link salvo com sucesso!');
       } else {
         alert(`Erro ao salvar: ${data.error || 'Erro desconhecido'}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving link:', err);
-      alert('Erro ao conectar com o servidor.');
+      addLog('/api/client-links', 0, { error: err.message });
+      alert(`Erro ao conectar com o servidor: ${err.message}`);
     }
   };
 
