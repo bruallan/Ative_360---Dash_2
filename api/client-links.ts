@@ -1,5 +1,5 @@
 import { IncomingMessage, ServerResponse } from 'http';
-import { URL } from 'url';
+import { CLICKUP_IDS } from '../src/constants'; // Import constants
 
 // Helper to get body
 const getBody = (req: IncomingMessage): Promise<any> => {
@@ -21,10 +21,8 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
   res.setHeader('Content-Type', 'application/json');
 
   const apiToken = process.env.CLICKUP_API_TOKEN;
-  // We need the list ID. Ideally from env, but we can fallback to a hardcoded one or fail gracefully.
-  // The frontend should have provided this via constants, but here we are in backend.
-  // We will try to read from env var CLICKUP_CONFIG_LIST_ID.
-  const configListId = process.env.CLICKUP_CONFIG_LIST_ID;
+  // Use the constant as fallback if env var is missing
+  const configListId = process.env.CLICKUP_CONFIG_LIST_ID || CLICKUP_IDS.CONFIG_LIST_ID;
 
   if (!apiToken) {
     res.statusCode = 500;
@@ -33,15 +31,13 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
   }
 
   if (!configListId) {
-    // If no config list is set, we can't save.
-    // We return empty object for GET, and error for POST.
     if (req.method === 'GET') {
       res.end(JSON.stringify({}));
       return;
     } else {
       res.statusCode = 500;
       res.end(JSON.stringify({ 
-        error: 'CLICKUP_CONFIG_LIST_ID not configured. Please create a list in ClickUp for dashboard links and add its ID to .env' 
+        error: 'CLICKUP_CONFIG_LIST_ID not configured.' 
       }));
       return;
     }
@@ -49,24 +45,23 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
 
   try {
     if (req.method === 'GET') {
-      // 1. Fetch all tasks from the config list
       const response = await fetch(`https://api.clickup.com/api/v2/list/${configListId}/task?archived=false`, {
         headers: { 'Authorization': apiToken }
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`ClickUp API Error (GET): ${response.status} - ${errorText}`);
         throw new Error(`ClickUp API Error: ${response.status}`);
       }
 
       const data = await response.json();
       const tasks = data.tasks || [];
 
-      // 2. Map tasks to { clientName: link }
-      // We assume Task Name = Client Name, Description = Link
       const links: Record<string, string> = {};
       tasks.forEach((task: any) => {
         if (task.description) {
-          links[task.name] = task.description; // Description contains the link
+          links[task.name] = task.description;
         }
       });
 
@@ -81,13 +76,17 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
         return;
       }
 
-      // 1. Check if task for this client already exists
-      // We fetch tasks filtering by name is hard in ClickUp V2 without custom search, 
-      // so we fetch all (usually config list is small) and find in memory.
+      // 1. Check existing task
       const listResponse = await fetch(`https://api.clickup.com/api/v2/list/${configListId}/task?archived=false`, {
         headers: { 'Authorization': apiToken }
       });
       
+      if (!listResponse.ok) {
+         const errorText = await listResponse.text();
+         console.error(`ClickUp API Error (LIST): ${listResponse.status} - ${errorText}`);
+         throw new Error(`Failed to fetch list: ${listResponse.status}`);
+      }
+
       const listData = await listResponse.json();
       const existingTask = listData.tasks?.find((t: any) => t.name.toLowerCase() === clientName.toLowerCase());
 
@@ -102,7 +101,11 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
           body: JSON.stringify({ description: link })
         });
 
-        if (!updateResponse.ok) throw new Error('Failed to update task');
+        if (!updateResponse.ok) {
+            const errorText = await updateResponse.text();
+            console.error(`ClickUp API Error (UPDATE): ${updateResponse.status} - ${errorText}`);
+            throw new Error(`Failed to update task: ${updateResponse.status}`);
+        }
 
       } else {
         // 3. Create new task
@@ -115,14 +118,36 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
           body: JSON.stringify({ 
             name: clientName, 
             description: link,
-            status: 'OPEN' // Default status
+            status: 'to do' // Changed from 'OPEN' to 'to do' which is more standard, or let ClickUp use default
           })
         });
 
-        if (!createResponse.ok) throw new Error('Failed to create task');
+        if (!createResponse.ok) {
+            const errorText = await createResponse.text();
+            console.error(`ClickUp API Error (CREATE): ${createResponse.status} - ${errorText}`);
+            // If status is invalid, try without status
+            if (errorText.includes("status")) {
+                 const retryResponse = await fetch(`https://api.clickup.com/api/v2/list/${configListId}/task`, {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': apiToken,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        name: clientName, 
+                        description: link
+                    })
+                });
+                if (!retryResponse.ok) {
+                    const retryError = await retryResponse.text();
+                    throw new Error(`Failed to create task (retry): ${retryError}`);
+                }
+            } else {
+                throw new Error(`Failed to create task: ${errorText}`);
+            }
+        }
       }
 
-      // Return updated links (re-fetch or just return success)
       res.end(JSON.stringify({ success: true }));
 
     } else {
