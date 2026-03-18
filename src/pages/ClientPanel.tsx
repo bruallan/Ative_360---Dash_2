@@ -1,13 +1,22 @@
 import { useState, useEffect } from 'react';
 import { SECTORS } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Loader2, Filter, Link as LinkIcon, Save, X } from 'lucide-react';
+import { Loader2, Filter, Link as LinkIcon, Save, X, Calendar, RefreshCw } from 'lucide-react';
 import { useData } from '../context/DataContext';
-import { format } from 'date-fns';
+import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { 
+  isTaskActiveInPeriod, 
+  isTaskCompletedInPeriod 
+} from '../utils/taskFilters';
 
 export default function ClientPanel() {
   const { tasks, clients, loading, addLog } = useData();
   const [selectedClient, setSelectedClient] = useState<string>('');
+  const [dateRange, setDateRange] = useState({
+    start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+    end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+  });
+  const [appliedDateRange, setAppliedDateRange] = useState(dateRange);
   const [stats, setStats] = useState<any[]>([]);
   const [clientLinks, setClientLinks] = useState<Record<string, string>>({});
   const [embedLink, setEmbedLink] = useState('');
@@ -47,7 +56,7 @@ export default function ClientPanel() {
       setEmbedLink(clientLinks[selectedClient] || '');
       setIsEditingLink(false);
     }
-  }, [selectedClient, tasks, clientLinks]);
+  }, [selectedClient, tasks, clientLinks, appliedDateRange]);
 
   const saveLink = async () => {
     try {
@@ -86,6 +95,11 @@ export default function ClientPanel() {
   };
 
   const calculateStats = () => {
+    const startDate = new Date(appliedDateRange.start).getTime();
+    const endDate = new Date(appliedDateRange.end);
+    endDate.setHours(23, 59, 59, 999);
+    const endDateMs = endDate.getTime();
+
     const clientTasks = tasks.filter((task: any) => {
       const clientField = task.custom_fields?.find((f: any) => f.name === 'Cliente');
       if (!clientField || !clientField.value) return false;
@@ -102,20 +116,29 @@ export default function ClientPanel() {
 
     const newStats = SECTORS.map(sector => {
       const sectorTasks = clientTasks.filter((t: any) => t.sector === sector.name);
-      const delivered = sectorTasks.filter((t: any) => t.status.status === 'entregue' || t.status.status === 'complete' || t.status.status === 'closed');
-      const notDelivered = sectorTasks.filter((t: any) => !(t.status.status === 'entregue' || t.status.status === 'complete' || t.status.status === 'closed'));
+      
+      const delivered = sectorTasks.filter((t: any) => isTaskCompletedInPeriod(t, startDate, endDateMs));
+      const active = sectorTasks.filter((t: any) => isTaskActiveInPeriod(t, startDate, endDateMs));
+      
+      // Some tasks might be both active and delivered in the same period (e.g., created and closed in the same month)
+      // For the chart, we usually separate them. "Não Entregue" would be active tasks that are NOT delivered in this period.
+      const notDelivered = active.filter((t: any) => !isTaskCompletedInPeriod(t, startDate, endDateMs));
 
       return {
         name: sector.name,
         Entregue: delivered.length,
         'Não Entregue': notDelivered.length,
-        total: sectorTasks.length,
+        total: delivered.length + notDelivered.length,
         tasksDelivered: delivered,
         tasksNotDelivered: notDelivered
       };
     });
 
     setStats(newStats);
+  };
+
+  const handleApplyFilter = () => {
+    setAppliedDateRange(dateRange);
   };
 
   const handleBarClick = (data: any, index: number, e: any) => {
@@ -133,17 +156,43 @@ export default function ClientPanel() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-slate-900">Painel de Clientes</h1>
         
-        <div className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <select 
-            value={selectedClient}
-            onChange={(e) => setSelectedClient(e.target.value)}
-            className="text-sm border-none focus:ring-0 p-0 w-48 bg-transparent font-medium text-slate-700"
-          >
-            {clients.map(client => (
-              <option key={client} value={client}>{client}</option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
+            <Calendar className="w-4 h-4 text-slate-400" />
+            <input 
+              type="date" 
+              value={dateRange.start}
+              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+              className="text-sm border-none focus:ring-0 p-0 w-32"
+            />
+            <span className="text-slate-400">-</span>
+            <input 
+              type="date" 
+              value={dateRange.end}
+              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+              className="text-sm border-none focus:ring-0 p-0 w-32"
+            />
+            <button 
+              onClick={handleApplyFilter}
+              className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-white text-sm font-medium rounded-md hover:bg-slate-700 transition-colors ml-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Carregar
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
+            <Filter className="w-4 h-4 text-slate-400" />
+            <select 
+              value={selectedClient}
+              onChange={(e) => setSelectedClient(e.target.value)}
+              className="text-sm border-none focus:ring-0 p-0 w-48 bg-transparent font-medium text-slate-700"
+            >
+              {clients.map(client => (
+                <option key={client} value={client}>{client}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

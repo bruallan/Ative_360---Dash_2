@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react';
 import { SECTORS } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Calendar, ArrowLeft } from 'lucide-react';
+import { Calendar, ArrowLeft, RefreshCw } from 'lucide-react';
 import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns';
 import { useData } from '../context/DataContext';
+import { 
+  isTaskActiveInPeriod, 
+  isTaskCompletedInPeriod, 
+  isTaskOverdueAtEndOfPeriod, 
+  isTaskCompletedOnTimeInPeriod 
+} from '../utils/taskFilters';
 
 export default function Overview() {
   const { tasks: allTasks, loading } = useData();
@@ -11,77 +17,95 @@ export default function Overview() {
     start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
   });
+  const [appliedDateRange, setAppliedDateRange] = useState(dateRange);
   const [stats, setStats] = useState<any[]>([]);
-  const [kpi, setKpi] = useState({ active: 0, overdue: 0, reliability: 0 });
+  const [kpi, setKpi] = useState({ 
+    active: 0, 
+    activeNew: 0, 
+    activeOld: 0, 
+    completed: 0, 
+    overdue: 0, 
+    reliability: 0 
+  });
 
   useEffect(() => {
     if (allTasks.length > 0) {
       calculateStats();
     }
-  }, [dateRange, allTasks]);
+  }, [appliedDateRange, allTasks]);
 
   const calculateStats = () => {
-    // Removed date filtering to show all tasks for now
-    // const startDate = new Date(dateRange.start).getTime();
-    // const endDate = new Date(dateRange.end).getTime();
-
-    // Filter by date
-    // const filteredTasks = allTasks.filter((t: any) => {
-    //   const created = parseInt(t.date_created);
-    //   return created >= startDate && created <= endDate;
-    // });
-    
-    const filteredTasks = allTasks; // Use all tasks
+    const startDate = new Date(appliedDateRange.start).getTime();
+    // Set end date to the end of the day (23:59:59)
+    const endDate = new Date(appliedDateRange.end);
+    endDate.setHours(23, 59, 59, 999);
+    const endDateMs = endDate.getTime();
 
     const newStats = [];
-    let totalDelivered = 0;
-    let totalTasks = 0;
     let totalActive = 0;
+    let totalActiveNew = 0;
+    let totalActiveOld = 0;
+    let totalCompleted = 0;
+    let totalCompletedOnTime = 0;
     let totalOverdue = 0;
 
     for (const sector of SECTORS) {
-      const sectorTasks = filteredTasks.filter((t: any) => t.sector === sector.name);
+      const sectorTasks = allTasks.filter((t: any) => t.sector === sector.name);
       
-      const delivered = sectorTasks.filter((t: any) => t.status.status === 'entregue' || t.status.status === 'complete' || t.status.status === 'closed').length;
-      const notDelivered = sectorTasks.length - delivered;
+      // Filter tasks active in period
+      const activeTasks = sectorTasks.filter((t: any) => isTaskActiveInPeriod(t, startDate, endDateMs));
       
-      // KPI Calcs
-      const active = sectorTasks.filter((t: any) => t.status.status !== 'entregue' && t.status.status !== 'complete' && t.status.status !== 'closed').length;
+      // Filter tasks completed in period
+      const completedTasks = sectorTasks.filter((t: any) => isTaskCompletedInPeriod(t, startDate, endDateMs));
       
-      // Check overdue (if due_date exists and is in past and not complete)
-      const overdue = sectorTasks.filter((t: any) => {
-        if (t.status.status === 'entregue' || t.status.status === 'complete' || t.status.status === 'closed') return false;
-        if (!t.due_date) return false;
-        return parseInt(t.due_date) < Date.now();
-      }).length;
+      // Overdue at the end of the period (from active tasks)
+      const overdueTasks = activeTasks.filter((t: any) => isTaskOverdueAtEndOfPeriod(t, endDateMs));
 
-      totalDelivered += delivered;
-      totalTasks += sectorTasks.length;
-      totalActive += active;
-      totalOverdue += overdue;
+      // Reliability
+      const completedOnTime = completedTasks.filter((t: any) => isTaskCompletedOnTimeInPeriod(t, startDate, endDateMs));
+
+      // Active breakdown
+      const activeNew = activeTasks.filter((t: any) => parseInt(t.date_created) >= startDate).length;
+      const activeOld = activeTasks.length - activeNew;
+
+      totalActive += activeTasks.length;
+      totalActiveNew += activeNew;
+      totalActiveOld += activeOld;
+      totalCompleted += completedTasks.length;
+      totalCompletedOnTime += completedOnTime.length;
+      totalOverdue += overdueTasks.length;
 
       newStats.push({
         name: sector.name,
-        Entregue: delivered,
-        'Não Entregue': notDelivered
+        Entregue: completedTasks.length,
+        'Não Entregue': activeTasks.length - completedTasks.length // Approximation for chart
       });
     }
 
     setStats(newStats);
     setKpi({
       active: totalActive,
+      activeNew: totalActiveNew,
+      activeOld: totalActiveOld,
+      completed: totalCompleted,
       overdue: totalOverdue,
-      reliability: totalTasks > 0 ? Math.round((totalDelivered / totalTasks) * 100) : 100
+      reliability: totalCompleted > 0 ? Math.round((totalCompletedOnTime / totalCompleted) * 100) : 100
     });
   };
 
   const handlePrevMonth = () => {
     const currentStart = new Date(dateRange.start);
     const prev = subMonths(currentStart, 1);
-    setDateRange({
+    const newRange = {
       start: format(startOfMonth(prev), 'yyyy-MM-dd'),
       end: format(endOfMonth(prev), 'yyyy-MM-dd')
-    });
+    };
+    setDateRange(newRange);
+    setAppliedDateRange(newRange);
+  };
+
+  const handleApplyFilter = () => {
+    setAppliedDateRange(dateRange);
   };
 
   return (
@@ -113,19 +137,47 @@ export default function Overview() {
               className="text-sm border-none focus:ring-0 p-0 w-32"
             />
           </div>
+          <button 
+            onClick={handleApplyFilter}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-white text-sm font-medium rounded-md hover:bg-slate-700 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Carregar
+          </button>
         </div>
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <p className="text-sm font-medium text-slate-500">Tarefas Ativas</p>
-          <p className="text-3xl font-bold text-slate-900 mt-2">{loading && allTasks.length === 0 ? '...' : kpi.active}</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+          <div>
+            <p className="text-sm font-medium text-slate-500">Tarefas Ativas</p>
+            <p className="text-3xl font-bold text-slate-900 mt-2">{loading && allTasks.length === 0 ? '...' : kpi.active}</p>
+          </div>
+          <div className="mt-4 flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 pt-3">
+            <span title="Criadas no período" className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+              Novas: <span className="font-semibold text-slate-700">{kpi.activeNew}</span>
+            </span>
+            <span title="Criadas antes do período" className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-slate-200"></span>
+              Anteriores: <span className="font-semibold text-slate-700">{kpi.activeOld}</span>
+            </span>
+          </div>
         </div>
+        
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <p className="text-sm font-medium text-slate-500">Tarefas Concluídas</p>
+          <p className="text-3xl font-bold text-emerald-600 mt-2">{loading && allTasks.length === 0 ? '...' : kpi.completed}</p>
+          <p className="text-xs text-slate-400 mt-1">No período selecionado</p>
+        </div>
+
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
           <p className="text-sm font-medium text-slate-500">Tarefas em Atraso</p>
           <p className="text-3xl font-bold text-red-600 mt-2">{loading && allTasks.length === 0 ? '...' : kpi.overdue}</p>
+          <p className="text-xs text-slate-400 mt-1">No final do período</p>
         </div>
+
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
           <p className="text-sm font-medium text-slate-500">Confiabilidade</p>
           <p className="text-3xl font-bold text-emerald-600 mt-2">{loading && allTasks.length === 0 ? '...' : `${kpi.reliability}%`}</p>

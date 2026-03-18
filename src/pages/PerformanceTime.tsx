@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Calendar, ArrowLeft, X, Loader2 } from 'lucide-react';
+import { Calendar, ArrowLeft, X, Loader2, RefreshCw } from 'lucide-react';
 import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns';
 import { useData } from '../context/DataContext';
+import { 
+  isTaskActiveInPeriod, 
+  isTaskCompletedInPeriod, 
+  isTaskOverdueAtEndOfPeriod 
+} from '../utils/taskFilters';
 
 const COLORS = {
   completed: '#475569', // Slate 600
@@ -16,6 +21,7 @@ export default function PerformanceTime() {
     start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
   });
+  const [appliedDateRange, setAppliedDateRange] = useState(dateRange);
   const [teamData, setTeamData] = useState<any[]>([]);
   
   // Modal State
@@ -24,12 +30,13 @@ export default function PerformanceTime() {
     start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
   });
+  const [appliedModalDateRange, setAppliedModalDateRange] = useState(modalDateRange);
 
   useEffect(() => {
     if (allTasks.length > 0) {
       processData();
     }
-  }, [allTasks]);
+  }, [allTasks, appliedDateRange]);
 
   const processData = async () => {
     try {
@@ -40,25 +47,25 @@ export default function PerformanceTime() {
       
       if (members.length === 0) return;
 
-      // 2. Filter Tasks by Date (REMOVED as per previous request for main view)
-      const filteredTasks = allTasks;
+      const startDate = new Date(appliedDateRange.start).getTime();
+      const endDate = new Date(appliedDateRange.end);
+      endDate.setHours(23, 59, 59, 999);
+      const endDateMs = endDate.getTime();
 
       // 3. Process Data per Member
       const processedMembers = members.map((member: any) => {
-        const memberTasks = filteredTasks.filter((t: any) => {
+        const memberTasks = allTasks.filter((t: any) => {
           return t.assignees.some((a: any) => a.id === member.id);
         });
 
-        const completed = memberTasks.filter((t: any) => t.status.status === 'entregue' || t.status.status === 'complete' || t.status.status === 'closed').length;
-        const active = memberTasks.filter((t: any) => t.status.status !== 'entregue' && t.status.status !== 'complete' && t.status.status !== 'closed').length;
-        
-        const overdue = memberTasks.filter((t: any) => {
-          if (t.status.status === 'entregue' || t.status.status === 'complete' || t.status.status === 'closed') return false;
-          if (!t.due_date) return false;
-          return parseInt(t.due_date) < Date.now();
-        }).length;
+        const activeTasks = memberTasks.filter((t: any) => isTaskActiveInPeriod(t, startDate, endDateMs));
+        const completedTasks = memberTasks.filter((t: any) => isTaskCompletedInPeriod(t, startDate, endDateMs));
+        const overdueTasks = activeTasks.filter((t: any) => isTaskOverdueAtEndOfPeriod(t, endDateMs));
 
-        const pending = active; 
+        const completed = completedTasks.length;
+        const active = activeTasks.length;
+        const overdue = overdueTasks.length;
+        const pending = active - completed - overdue; // Not delivered and not overdue in this period
 
         return {
           ...member,
@@ -74,22 +81,34 @@ export default function PerformanceTime() {
   };
 
   const getFilteredMemberTasks = (tasks: any[]) => {
-    const startDate = new Date(modalDateRange.start).getTime();
-    const endDate = new Date(modalDateRange.end).getTime();
+    const startDate = new Date(appliedModalDateRange.start).getTime();
+    const endDate = new Date(appliedModalDateRange.end);
+    endDate.setHours(23, 59, 59, 999);
+    const endDateMs = endDate.getTime();
 
     return tasks.filter((t: any) => {
-      const created = parseInt(t.date_created);
-      return created >= startDate && created <= endDate;
+      // For the modal, we want to show tasks that were active OR completed in the period
+      return isTaskActiveInPeriod(t, startDate, endDateMs) || isTaskCompletedInPeriod(t, startDate, endDateMs);
     });
   };
 
   const handlePrevMonth = () => {
     const currentStart = new Date(dateRange.start);
     const prev = subMonths(currentStart, 1);
-    setDateRange({
+    const newRange = {
       start: format(startOfMonth(prev), 'yyyy-MM-dd'),
       end: format(endOfMonth(prev), 'yyyy-MM-dd')
-    });
+    };
+    setDateRange(newRange);
+    setAppliedDateRange(newRange);
+  };
+
+  const handleApplyFilter = () => {
+    setAppliedDateRange(dateRange);
+  };
+
+  const handleApplyModalFilter = () => {
+    setAppliedModalDateRange(modalDateRange);
   };
 
   if (loading && allTasks.length === 0) return <div className="flex justify-center p-12"><Loader2 className="animate-spin w-8 h-8 text-slate-600" /></div>;
@@ -123,6 +142,13 @@ export default function PerformanceTime() {
               className="text-sm border-none focus:ring-0 p-0 w-32"
             />
           </div>
+          <button 
+            onClick={handleApplyFilter}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-white text-sm font-medium rounded-md hover:bg-slate-700 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Carregar
+          </button>
         </div>
       </div>
 
@@ -133,10 +159,12 @@ export default function PerformanceTime() {
             key={member.id} 
             onClick={() => {
               setSelectedMember(member);
-              setModalDateRange({
-                start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
-                end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
-              });
+              const newRange = {
+                start: appliedDateRange.start,
+                end: appliedDateRange.end
+              };
+              setModalDateRange(newRange);
+              setAppliedModalDateRange(newRange);
             }}
             className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 cursor-pointer hover:shadow-md transition-all group"
           >
@@ -177,7 +205,7 @@ export default function PerformanceTime() {
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex items-center justify-center flex-col">
                   <span className="text-xs text-slate-400">Total</span>
-                  <span className="font-bold text-slate-700">{member.tasks.length}</span>
+                  <span className="font-bold text-slate-700">{member.stats.completed + member.stats.pending + member.stats.overdue}</span>
                 </div>
               </div>
 
@@ -245,6 +273,13 @@ export default function PerformanceTime() {
                     onChange={(e) => setModalDateRange(prev => ({ ...prev, end: e.target.value }))}
                     className="text-xs border-none focus:ring-0 p-0 w-24 text-slate-600"
                   />
+                  <button 
+                    onClick={handleApplyModalFilter}
+                    className="flex items-center gap-1 px-2 py-1 bg-slate-800 text-white text-xs font-medium rounded hover:bg-slate-700 transition-colors ml-1"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Carregar
+                  </button>
                 </div>
 
                 <button onClick={() => setSelectedMember(null)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-200 rounded-full transition-colors">
@@ -263,7 +298,11 @@ export default function PerformanceTime() {
                   </h4>
                   <div className="space-y-3">
                     {getFilteredMemberTasks(selectedMember.tasks)
-                      .filter((t: any) => ['a fazer', 'to do', 'open'].includes(t.status.status.toLowerCase()))
+                      .filter((t: any) => {
+                        const isCompletedInPeriod = isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999));
+                        if (isCompletedInPeriod) return false;
+                        return ['a fazer', 'to do', 'open'].includes(t.status.status.toLowerCase());
+                      })
                       .map((task: any) => (
                         <TaskCard key={task.id} task={task} />
                       ))}
@@ -278,7 +317,17 @@ export default function PerformanceTime() {
                   </h4>
                   <div className="space-y-3">
                     {getFilteredMemberTasks(selectedMember.tasks)
-                      .filter((t: any) => !['a fazer', 'to do', 'open', 'entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase()))
+                      .filter((t: any) => {
+                        const isCompletedInPeriod = isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999));
+                        if (isCompletedInPeriod) return false;
+                        
+                        // If it's not completed in the period, but its current status is completed (meaning it was completed AFTER the period),
+                        // we should show it as "Fazendo" (in progress) for this period's perspective.
+                        const isCurrentlyCompleted = ['entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase());
+                        const isCurrentlyToDo = ['a fazer', 'to do', 'open'].includes(t.status.status.toLowerCase());
+                        
+                        return isCurrentlyCompleted || (!isCurrentlyToDo && !isCurrentlyCompleted);
+                      })
                       .map((task: any) => (
                         <TaskCard key={task.id} task={task} />
                       ))}
@@ -293,7 +342,7 @@ export default function PerformanceTime() {
                   </h4>
                   <div className="space-y-3">
                     {getFilteredMemberTasks(selectedMember.tasks)
-                      .filter((t: any) => ['entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase()))
+                      .filter((t: any) => isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999)))
                       .map((task: any) => (
                         <TaskCard key={task.id} task={task} />
                       ))}
@@ -308,7 +357,7 @@ export default function PerformanceTime() {
   );
 }
 
-const TaskCard = ({ task }: { task: any }) => (
+const TaskCard = ({ task }: { task: any; key?: string | number }) => (
   <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all">
     <div className="flex justify-between items-start gap-2 mb-2">
       <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{task.list.name}</span>

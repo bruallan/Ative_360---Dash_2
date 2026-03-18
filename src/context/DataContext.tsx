@@ -94,8 +94,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // ACC_REUNIOES and ACC_DEMANDAS might be separate lists.
       // Let's fetch them explicitly just in case, or check if they are duplicates.
       // Assuming they might be separate for now.
-      const accReunioes = await fetchAllPages(`/api/tasks?list_id=${CLICKUP_IDS.LISTS.ACC_REUNIOES}&subtasks=true&include_closed=false`);
-      const accDemandas = await fetchAllPages(`/api/tasks?list_id=${CLICKUP_IDS.LISTS.ACC_DEMANDAS}&subtasks=true&include_closed=false`);
+      const accReunioes = await fetchAllPages(`/api/tasks?list_id=${CLICKUP_IDS.LISTS.ACC_REUNIOES}&subtasks=true&include_closed=true`);
+      const accDemandas = await fetchAllPages(`/api/tasks?list_id=${CLICKUP_IDS.LISTS.ACC_DEMANDAS}&subtasks=true&include_closed=true`);
       
       // Merge without duplicates
       const taskMap = new Map();
