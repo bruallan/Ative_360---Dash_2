@@ -46,13 +46,28 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
       const finalUrl = `${url}?${params.toString()}`;
       console.log(`[API] Fetching tasks: ${finalUrl}`);
       
-      const response = await fetch(finalUrl, {
-        headers: { "Authorization": apiToken }
-      });
+      let retries = 3;
+      let response;
+      while (retries > 0) {
+        try {
+          response = await fetch(finalUrl, {
+            headers: { 
+              "Authorization": apiToken,
+              "User-Agent": "Node.js/Fetch",
+              "Connection": "keep-alive"
+            }
+          });
+          break;
+        } catch (err: any) {
+          retries--;
+          if (retries === 0) throw err;
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`ClickUp API Error ${response.status}: ${errorText}`);
+      if (!response || !response.ok) {
+        const errorText = await response?.text();
+        throw new Error(`ClickUp API Error ${response?.status}: ${errorText}`);
       }
 
       const data = await response.json();
@@ -78,41 +93,71 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
       const listsData = await listsResponse.json();
       const lists = listsData.lists || [];
 
-      // 2. Fetch Tasks for each List (in parallel)
-      const taskPromises = lists.map(async (list: any) => {
-        const listTaskUrl = `https://api.clickup.com/api/v2/list/${list.id}/task`;
-        const params = new URLSearchParams({
-          page,
-          subtasks: includeSubtasks,
-          archived,
-          include_closed: 'true',
-        });
+      // 2. Fetch Tasks for each List (in batches to avoid ECONNRESET)
+      const allTasks = [];
+      const batchSize = 3;
+      
+      for (let i = 0; i < lists.length; i += batchSize) {
+        const batch = lists.slice(i, i + batchSize);
         
-        if (currentUrl.searchParams.has('date_created_gt')) {
-          params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
-        }
-        if (currentUrl.searchParams.has('date_created_lt')) {
-          params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
-        }
+        const batchPromises = batch.map(async (list: any) => {
+          const listTaskUrl = `https://api.clickup.com/api/v2/list/${list.id}/task`;
+          const params = new URLSearchParams({
+            page,
+            subtasks: includeSubtasks,
+            archived,
+            include_closed: 'true',
+          });
+          
+          if (currentUrl.searchParams.has('date_created_gt')) {
+            params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
+          }
+          if (currentUrl.searchParams.has('date_created_lt')) {
+            params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
+          }
 
-        const finalUrl = `${listTaskUrl}?${params.toString()}`;
-        // console.log(`[API] Fetching tasks for list ${list.id}: ${finalUrl}`); // Too verbose
-        
-        const response = await fetch(finalUrl, {
-          headers: { "Authorization": apiToken }
-        });
+          const finalUrl = `${listTaskUrl}?${params.toString()}`;
+          
+          // Retry logic for ECONNRESET
+          let retries = 3;
+          while (retries > 0) {
+            try {
+              const response = await fetch(finalUrl, {
+                headers: { 
+                  "Authorization": apiToken,
+                  "User-Agent": "Node.js/Fetch",
+                  "Connection": "keep-alive"
+                }
+              });
 
-        if (!response.ok) {
-          console.error(`Failed to fetch tasks for list ${list.id}: ${response.status}`);
+              if (!response.ok) {
+                console.error(`Failed to fetch tasks for list ${list.id}: ${response.status}`);
+                return [];
+              }
+
+              const data = await response.json();
+              return data.tasks || [];
+            } catch (err: any) {
+              retries--;
+              if (retries === 0) {
+                console.error(`Error fetching tasks for list ${list.id} after retries:`, err);
+                return [];
+              }
+              // Wait before retrying
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
           return [];
+        });
+
+        const results = await Promise.all(batchPromises);
+        allTasks.push(...results.flat());
+        
+        // Small delay between batches to prevent rate limiting
+        if (i + batchSize < lists.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
-
-        const data = await response.json();
-        return data.tasks || [];
-      });
-
-      const results = await Promise.all(taskPromises);
-      const allTasks = results.flat();
+      }
 
       res.end(JSON.stringify({ tasks: allTasks }));
 

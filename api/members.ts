@@ -24,11 +24,29 @@ export default async function membersHandler(req: IncomingMessage, res: ServerRe
     const url = "https://api.clickup.com/api/v2/team";
     
     console.log(`[API] Fetching ${url}...`);
-    const response = await fetch(url, {
-      headers: {
-        "Authorization": apiToken
+    
+    let retries = 3;
+    let response;
+    while (retries > 0) {
+      try {
+        response = await fetch(url, {
+          headers: {
+            "Authorization": apiToken,
+            "User-Agent": "Node.js/Fetch",
+            "Connection": "keep-alive"
+          }
+        });
+        break;
+      } catch (err: any) {
+        retries--;
+        if (retries === 0) throw err;
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-    });
+    }
+
+    if (!response) {
+      throw new Error("Failed to fetch after retries");
+    }
 
     console.log(`[API] Response status: ${response.status}`);
 

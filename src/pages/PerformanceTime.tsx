@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Calendar, ArrowLeft, X, Loader2, RefreshCw } from 'lucide-react';
+import { Calendar, ArrowLeft, X, Loader2, RefreshCw, Filter } from 'lucide-react';
 import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns';
 import { useData } from '../context/DataContext';
 import { 
   isTaskActiveInPeriod, 
   isTaskCompletedInPeriod, 
-  isTaskOverdueAtEndOfPeriod 
+  isTaskOverdueAtEndOfPeriod,
+  isTaskCreatedInPeriod
 } from '../utils/taskFilters';
 
 const COLORS = {
@@ -22,6 +23,17 @@ export default function PerformanceTime() {
     end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
   });
   const [appliedDateRange, setAppliedDateRange] = useState(dateRange);
+  
+  // Advanced Filter State
+  const [isAdvancedFilter, setIsAdvancedFilter] = useState(false);
+  const [advancedDateRange, setAdvancedDateRange] = useState({
+    createdStart: '',
+    createdEnd: '',
+    completedStart: '',
+    completedEnd: ''
+  });
+  const [appliedAdvancedDateRange, setAppliedAdvancedDateRange] = useState(advancedDateRange);
+
   const [teamData, setTeamData] = useState<any[]>([]);
   
   // Modal State
@@ -31,12 +43,22 @@ export default function PerformanceTime() {
     end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
   });
   const [appliedModalDateRange, setAppliedModalDateRange] = useState(modalDateRange);
+  
+  // Modal Advanced Filter State
+  const [isModalAdvancedFilter, setIsModalAdvancedFilter] = useState(false);
+  const [modalAdvancedDateRange, setModalAdvancedDateRange] = useState({
+    createdStart: '',
+    createdEnd: '',
+    completedStart: '',
+    completedEnd: ''
+  });
+  const [appliedModalAdvancedDateRange, setAppliedModalAdvancedDateRange] = useState(modalAdvancedDateRange);
 
   useEffect(() => {
     if (allTasks.length > 0) {
       processData();
     }
-  }, [allTasks, appliedDateRange]);
+  }, [allTasks, appliedDateRange, appliedAdvancedDateRange, isAdvancedFilter]);
 
   const processData = async () => {
     try {
@@ -58,14 +80,52 @@ export default function PerformanceTime() {
           return t.assignees.some((a: any) => a.id === member.id);
         });
 
-        const activeTasks = memberTasks.filter((t: any) => isTaskActiveInPeriod(t, startDate, endDateMs));
-        const completedTasks = memberTasks.filter((t: any) => isTaskCompletedInPeriod(t, startDate, endDateMs));
-        const overdueTasks = activeTasks.filter((t: any) => isTaskOverdueAtEndOfPeriod(t, endDateMs));
+        let completed = 0;
+        let active = 0;
+        let overdue = 0;
+        let pending = 0;
 
-        const completed = completedTasks.length;
-        const active = activeTasks.length;
-        const overdue = overdueTasks.length;
-        const pending = active - completed - overdue; // Not delivered and not overdue in this period
+        if (isAdvancedFilter) {
+          const { createdStart, createdEnd, completedStart, completedEnd } = appliedAdvancedDateRange;
+          
+          let filteredTasks = memberTasks;
+
+          if (createdStart && createdEnd) {
+            const cStart = new Date(createdStart).getTime();
+            const cEnd = new Date(createdEnd);
+            cEnd.setHours(23, 59, 59, 999);
+            filteredTasks = filteredTasks.filter((t: any) => isTaskCreatedInPeriod(t, cStart, cEnd.getTime()));
+          }
+
+          if (completedStart && completedEnd) {
+            const compStart = new Date(completedStart).getTime();
+            const compEnd = new Date(completedEnd);
+            compEnd.setHours(23, 59, 59, 999);
+            filteredTasks = filteredTasks.filter((t: any) => isTaskCompletedInPeriod(t, compStart, compEnd.getTime()));
+          }
+
+          const completedTasksList = filteredTasks.filter((t: any) => ['entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase()));
+          const activeTasksList = filteredTasks.filter((t: any) => !['entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase()));
+          const overdueTasksList = activeTasksList.filter((t: any) => {
+            const due = t.due_date ? parseInt(t.due_date) : null;
+            return due && due < Date.now();
+          });
+
+          completed = completedTasksList.length;
+          overdue = overdueTasksList.length;
+          pending = activeTasksList.length - overdue;
+          active = completed + pending + overdue;
+
+        } else {
+          const activeTasksList = memberTasks.filter((t: any) => isTaskActiveInPeriod(t, startDate, endDateMs));
+          const completedTasksList = memberTasks.filter((t: any) => isTaskCompletedInPeriod(t, startDate, endDateMs));
+          const overdueTasksList = activeTasksList.filter((t: any) => isTaskOverdueAtEndOfPeriod(t, endDateMs));
+
+          completed = completedTasksList.length;
+          active = activeTasksList.length;
+          overdue = overdueTasksList.length;
+          pending = active - completed - overdue; // Not delivered and not overdue in this period
+        }
 
         return {
           ...member,
@@ -81,15 +141,37 @@ export default function PerformanceTime() {
   };
 
   const getFilteredMemberTasks = (tasks: any[]) => {
-    const startDate = new Date(appliedModalDateRange.start).getTime();
-    const endDate = new Date(appliedModalDateRange.end);
-    endDate.setHours(23, 59, 59, 999);
-    const endDateMs = endDate.getTime();
+    if (isModalAdvancedFilter) {
+      const { createdStart, createdEnd, completedStart, completedEnd } = appliedModalAdvancedDateRange;
+      
+      let filteredTasks = tasks;
 
-    return tasks.filter((t: any) => {
-      // For the modal, we want to show tasks that were active OR completed in the period
-      return isTaskActiveInPeriod(t, startDate, endDateMs) || isTaskCompletedInPeriod(t, startDate, endDateMs);
-    });
+      if (createdStart && createdEnd) {
+        const cStart = new Date(createdStart).getTime();
+        const cEnd = new Date(createdEnd);
+        cEnd.setHours(23, 59, 59, 999);
+        filteredTasks = filteredTasks.filter((t: any) => isTaskCreatedInPeriod(t, cStart, cEnd.getTime()));
+      }
+
+      if (completedStart && completedEnd) {
+        const compStart = new Date(completedStart).getTime();
+        const compEnd = new Date(completedEnd);
+        compEnd.setHours(23, 59, 59, 999);
+        filteredTasks = filteredTasks.filter((t: any) => isTaskCompletedInPeriod(t, compStart, compEnd.getTime()));
+      }
+
+      return filteredTasks;
+    } else {
+      const startDate = new Date(appliedModalDateRange.start).getTime();
+      const endDate = new Date(appliedModalDateRange.end);
+      endDate.setHours(23, 59, 59, 999);
+      const endDateMs = endDate.getTime();
+
+      return tasks.filter((t: any) => {
+        // For the modal, we want to show tasks that were active OR completed in the period
+        return isTaskActiveInPeriod(t, startDate, endDateMs) || isTaskCompletedInPeriod(t, startDate, endDateMs);
+      });
+    }
   };
 
   const handlePrevMonth = () => {
@@ -104,11 +186,19 @@ export default function PerformanceTime() {
   };
 
   const handleApplyFilter = () => {
-    setAppliedDateRange(dateRange);
+    if (isAdvancedFilter) {
+      setAppliedAdvancedDateRange(advancedDateRange);
+    } else {
+      setAppliedDateRange(dateRange);
+    }
   };
 
   const handleApplyModalFilter = () => {
-    setAppliedModalDateRange(modalDateRange);
+    if (isModalAdvancedFilter) {
+      setAppliedModalAdvancedDateRange(modalAdvancedDateRange);
+    } else {
+      setAppliedModalDateRange(modalDateRange);
+    }
   };
 
   if (loading && allTasks.length === 0) return <div className="flex justify-center p-12"><Loader2 className="animate-spin w-8 h-8 text-slate-600" /></div>;
@@ -118,37 +208,87 @@ export default function PerformanceTime() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-slate-900">Performance Time</h1>
         
-        <div className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
-          <button 
-            onClick={handlePrevMonth}
-            className="p-2 hover:bg-slate-100 rounded-md text-slate-600"
-            title="Mês Anterior"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <div className="flex items-center gap-2 px-2 border-l border-r border-slate-200">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <input 
-              type="date" 
-              value={dateRange.start}
-              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-              className="text-sm border-none focus:ring-0 p-0 w-32"
-            />
-            <span className="text-slate-400">-</span>
-            <input 
-              type="date" 
-              value={dateRange.end}
-              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-              className="text-sm border-none focus:ring-0 p-0 w-32"
-            />
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
+            <button 
+              onClick={() => setIsAdvancedFilter(!isAdvancedFilter)}
+              className={`p-2 rounded-md transition-colors ${isAdvancedFilter ? 'bg-slate-800 text-white' : 'hover:bg-slate-100 text-slate-600'}`}
+              title="Filtro Avançado"
+            >
+              <Filter className="w-4 h-4" />
+            </button>
+            
+            {!isAdvancedFilter ? (
+              <>
+                <button 
+                  onClick={handlePrevMonth}
+                  className="p-2 hover:bg-slate-100 rounded-md text-slate-600"
+                  title="Mês Anterior"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div className="flex items-center gap-2 px-2 border-l border-r border-slate-200">
+                  <Calendar className="w-4 h-4 text-slate-400" />
+                  <input 
+                    type="date" 
+                    value={dateRange.start}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                    className="text-sm border-none focus:ring-0 p-0 w-32"
+                  />
+                  <span className="text-slate-400">-</span>
+                  <input 
+                    type="date" 
+                    value={dateRange.end}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                    className="text-sm border-none focus:ring-0 p-0 w-32"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col sm:flex-row items-center gap-4 px-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-slate-500 w-16">Criação:</span>
+                  <input 
+                    type="date" 
+                    value={advancedDateRange.createdStart}
+                    onChange={(e) => setAdvancedDateRange(prev => ({ ...prev, createdStart: e.target.value }))}
+                    className="text-sm border-none focus:ring-0 p-0 w-32 bg-slate-50 rounded px-1"
+                  />
+                  <span className="text-slate-400">-</span>
+                  <input 
+                    type="date" 
+                    value={advancedDateRange.createdEnd}
+                    onChange={(e) => setAdvancedDateRange(prev => ({ ...prev, createdEnd: e.target.value }))}
+                    className="text-sm border-none focus:ring-0 p-0 w-32 bg-slate-50 rounded px-1"
+                  />
+                </div>
+                <div className="hidden sm:block w-px h-6 bg-slate-200"></div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-slate-500 w-16">Conclusão:</span>
+                  <input 
+                    type="date" 
+                    value={advancedDateRange.completedStart}
+                    onChange={(e) => setAdvancedDateRange(prev => ({ ...prev, completedStart: e.target.value }))}
+                    className="text-sm border-none focus:ring-0 p-0 w-32 bg-slate-50 rounded px-1"
+                  />
+                  <span className="text-slate-400">-</span>
+                  <input 
+                    type="date" 
+                    value={advancedDateRange.completedEnd}
+                    onChange={(e) => setAdvancedDateRange(prev => ({ ...prev, completedEnd: e.target.value }))}
+                    className="text-sm border-none focus:ring-0 p-0 w-32 bg-slate-50 rounded px-1"
+                  />
+                </div>
+              </div>
+            )}
+            <button 
+              onClick={handleApplyFilter}
+              className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-white text-sm font-medium rounded-md hover:bg-slate-700 transition-colors ml-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Carregar
+            </button>
           </div>
-          <button 
-            onClick={handleApplyFilter}
-            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-white text-sm font-medium rounded-md hover:bg-slate-700 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Carregar
-          </button>
         </div>
       </div>
 
@@ -241,7 +381,7 @@ export default function PerformanceTime() {
       {selectedMember && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-xl">
+            <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-50 rounded-t-xl gap-4">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center text-slate-500 font-bold overflow-hidden border border-slate-200">
                   {selectedMember.profilePicture ? (
@@ -256,23 +396,71 @@ export default function PerformanceTime() {
                 </div>
               </div>
               
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
                 {/* Date Filter inside Modal */}
-                <div className="flex items-center gap-2 bg-white p-1.5 rounded-lg border shadow-sm">
-                  <Calendar className="w-4 h-4 text-slate-400" />
-                  <input 
-                    type="date" 
-                    value={modalDateRange.start}
-                    onChange={(e) => setModalDateRange(prev => ({ ...prev, start: e.target.value }))}
-                    className="text-xs border-none focus:ring-0 p-0 w-24 text-slate-600"
-                  />
-                  <span className="text-slate-300">-</span>
-                  <input 
-                    type="date" 
-                    value={modalDateRange.end}
-                    onChange={(e) => setModalDateRange(prev => ({ ...prev, end: e.target.value }))}
-                    className="text-xs border-none focus:ring-0 p-0 w-24 text-slate-600"
-                  />
+                <div className="flex items-center gap-2 bg-white p-1.5 rounded-lg border shadow-sm min-w-max">
+                  <button 
+                    onClick={() => setIsModalAdvancedFilter(!isModalAdvancedFilter)}
+                    className={`p-1.5 rounded transition-colors ${isModalAdvancedFilter ? 'bg-slate-800 text-white' : 'hover:bg-slate-100 text-slate-600'}`}
+                    title="Filtro Avançado"
+                  >
+                    <Filter className="w-3.5 h-3.5" />
+                  </button>
+
+                  {!isModalAdvancedFilter ? (
+                    <>
+                      <Calendar className="w-4 h-4 text-slate-400 ml-1" />
+                      <input 
+                        type="date" 
+                        value={modalDateRange.start}
+                        onChange={(e) => setModalDateRange(prev => ({ ...prev, start: e.target.value }))}
+                        className="text-xs border-none focus:ring-0 p-0 w-24 text-slate-600"
+                      />
+                      <span className="text-slate-300">-</span>
+                      <input 
+                        type="date" 
+                        value={modalDateRange.end}
+                        onChange={(e) => setModalDateRange(prev => ({ ...prev, end: e.target.value }))}
+                        className="text-xs border-none focus:ring-0 p-0 w-24 text-slate-600"
+                      />
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-3 px-1">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-medium text-slate-500 uppercase">Criação:</span>
+                        <input 
+                          type="date" 
+                          value={modalAdvancedDateRange.createdStart}
+                          onChange={(e) => setModalAdvancedDateRange(prev => ({ ...prev, createdStart: e.target.value }))}
+                          className="text-xs border-none focus:ring-0 p-0 w-24 bg-slate-50 rounded px-1"
+                        />
+                        <span className="text-slate-300">-</span>
+                        <input 
+                          type="date" 
+                          value={modalAdvancedDateRange.createdEnd}
+                          onChange={(e) => setModalAdvancedDateRange(prev => ({ ...prev, createdEnd: e.target.value }))}
+                          className="text-xs border-none focus:ring-0 p-0 w-24 bg-slate-50 rounded px-1"
+                        />
+                      </div>
+                      <div className="w-px h-4 bg-slate-200"></div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-medium text-slate-500 uppercase">Conclusão:</span>
+                        <input 
+                          type="date" 
+                          value={modalAdvancedDateRange.completedStart}
+                          onChange={(e) => setModalAdvancedDateRange(prev => ({ ...prev, completedStart: e.target.value }))}
+                          className="text-xs border-none focus:ring-0 p-0 w-24 bg-slate-50 rounded px-1"
+                        />
+                        <span className="text-slate-300">-</span>
+                        <input 
+                          type="date" 
+                          value={modalAdvancedDateRange.completedEnd}
+                          onChange={(e) => setModalAdvancedDateRange(prev => ({ ...prev, completedEnd: e.target.value }))}
+                          className="text-xs border-none focus:ring-0 p-0 w-24 bg-slate-50 rounded px-1"
+                        />
+                      </div>
+                    </div>
+                  )}
                   <button 
                     onClick={handleApplyModalFilter}
                     className="flex items-center gap-1 px-2 py-1 bg-slate-800 text-white text-xs font-medium rounded hover:bg-slate-700 transition-colors ml-1"
@@ -282,7 +470,7 @@ export default function PerformanceTime() {
                   </button>
                 </div>
 
-                <button onClick={() => setSelectedMember(null)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-200 rounded-full transition-colors">
+                <button onClick={() => setSelectedMember(null)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-200 rounded-full transition-colors shrink-0">
                   <X className="w-6 h-6" />
                 </button>
               </div>
@@ -299,6 +487,9 @@ export default function PerformanceTime() {
                   <div className="space-y-3">
                     {getFilteredMemberTasks(selectedMember.tasks)
                       .filter((t: any) => {
+                        if (isModalAdvancedFilter) {
+                          return ['a fazer', 'to do', 'open'].includes(t.status.status.toLowerCase());
+                        }
                         const isCompletedInPeriod = isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999));
                         if (isCompletedInPeriod) return false;
                         return ['a fazer', 'to do', 'open'].includes(t.status.status.toLowerCase());
@@ -318,14 +509,18 @@ export default function PerformanceTime() {
                   <div className="space-y-3">
                     {getFilteredMemberTasks(selectedMember.tasks)
                       .filter((t: any) => {
+                        const isCurrentlyCompleted = ['entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase());
+                        const isCurrentlyToDo = ['a fazer', 'to do', 'open'].includes(t.status.status.toLowerCase());
+                        
+                        if (isModalAdvancedFilter) {
+                          return !isCurrentlyToDo && !isCurrentlyCompleted;
+                        }
+
                         const isCompletedInPeriod = isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999));
                         if (isCompletedInPeriod) return false;
                         
                         // If it's not completed in the period, but its current status is completed (meaning it was completed AFTER the period),
                         // we should show it as "Fazendo" (in progress) for this period's perspective.
-                        const isCurrentlyCompleted = ['entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase());
-                        const isCurrentlyToDo = ['a fazer', 'to do', 'open'].includes(t.status.status.toLowerCase());
-                        
                         return isCurrentlyCompleted || (!isCurrentlyToDo && !isCurrentlyCompleted);
                       })
                       .map((task: any) => (
@@ -342,7 +537,12 @@ export default function PerformanceTime() {
                   </h4>
                   <div className="space-y-3">
                     {getFilteredMemberTasks(selectedMember.tasks)
-                      .filter((t: any) => isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999)))
+                      .filter((t: any) => {
+                        if (isModalAdvancedFilter) {
+                           return ['entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase());
+                        }
+                        return isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999));
+                      })
                       .map((task: any) => (
                         <TaskCard key={task.id} task={task} />
                       ))}
@@ -372,7 +572,7 @@ const TaskCard = ({ task }: { task: any; key?: string | number }) => (
       )}
     </div>
     <h5 className="text-sm font-medium text-slate-900 line-clamp-2 mb-2" title={task.name}>{task.name}</h5>
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between mb-3">
       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium uppercase ${
         task.status.status === 'entregue' || task.status.status === 'complete' 
           ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
@@ -380,6 +580,20 @@ const TaskCard = ({ task }: { task: any; key?: string | number }) => (
       }`}>
         {task.status.status}
       </span>
+    </div>
+    <div className="flex flex-col gap-1 pt-2 border-t border-slate-100">
+      <div className="flex justify-between items-center text-[10px] text-slate-500">
+        <span>Criada em:</span>
+        <span className="font-medium text-slate-700">
+          {task.date_created ? format(new Date(parseInt(task.date_created)), 'dd/MM/yyyy') : '-'}
+        </span>
+      </div>
+      <div className="flex justify-between items-center text-[10px] text-slate-500">
+        <span>Data de conclusão:</span>
+        <span className="font-medium text-slate-700">
+          {task.date_closed ? format(new Date(parseInt(task.date_closed)), 'dd/MM/yyyy') : '-'}
+        </span>
+      </div>
     </div>
   </div>
 );

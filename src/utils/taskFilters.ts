@@ -1,3 +1,8 @@
+export const isTaskCreatedInPeriod = (task: any, startDate: number, endDate: number) => {
+  const created = parseInt(task.date_created);
+  return created >= startDate && created <= endDate;
+};
+
 export const isTaskActiveInPeriod = (task: any, startDate: number, endDate: number) => {
   const created = parseInt(task.date_created);
   const closed = task.date_closed ? parseInt(task.date_closed) : null;
