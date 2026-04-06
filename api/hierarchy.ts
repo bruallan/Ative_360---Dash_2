@@ -1,6 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { URL } from 'url';
-import { db } from '../src/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
 export default async function hierarchyHandler(req: IncomingMessage, res: ServerResponse) {
@@ -21,6 +20,15 @@ export default async function hierarchyHandler(req: IncomingMessage, res: Server
     try {
       if (now < quotaExceededUntil) {
         throw new Error("Quota previously exceeded (Circuit Breaker active)");
+      }
+
+      let db: any = null;
+      try {
+        const firebaseModule = await import('../src/firebase');
+        db = firebaseModule.db;
+      } catch (importError) {
+        console.warn("[API] Could not load Firebase module, bypassing cache:", importError);
+        throw new Error("Firebase module load failed");
       }
 
       console.log(`[Hierarchy] Fetching hierarchy for team ${teamId} from Firebase...`);

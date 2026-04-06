@@ -1,6 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { URL } from 'url';
-import { db } from '../src/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
 export default async function tasksHandler(req: IncomingMessage, res: ServerResponse) {
@@ -44,6 +43,17 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
       if (parseInt(page) > 0) {
         res.end(JSON.stringify({ tasks: [] }));
         return;
+      }
+
+      let db: any = null;
+      try {
+        // Dynamic import to prevent fatal crashes during Vercel serverless cold starts
+        // if firebase-applet-config.json is missing or causes ESM issues.
+        const firebaseModule = await import('../src/firebase');
+        db = firebaseModule.db;
+      } catch (importError) {
+        console.warn("[API] Could not load Firebase module, bypassing cache:", importError);
+        throw new Error("Firebase module load failed");
       }
 
       console.log(`[API] Fetching tasks for ${type} ${id} from Firebase...`);
