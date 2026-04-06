@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { URL } from 'url';
-import { db } from '../firebase.js';
+import { db } from '../src/firebase.js';
 import { doc, getDoc } from 'firebase/firestore';
 
 export default async function hierarchyHandler(req: IncomingMessage, res: ServerResponse) {
@@ -35,9 +35,14 @@ export default async function hierarchyHandler(req: IncomingMessage, res: Server
         throw new Error("Cache empty");
       }
     } catch (firebaseError: any) {
-      if (firebaseError.message.includes("Quota limit exceeded")) {
-        console.warn(`[Hierarchy] Firebase Quota Exceeded. Activating circuit breaker.`);
-        (global as any).firebaseQuotaExceededUntil = now + 10 * 60 * 1000;
+      const isQuotaError = 
+        firebaseError.message?.includes("Quota limit exceeded") || 
+        firebaseError.message?.includes("RESOURCE_EXHAUSTED") ||
+        firebaseError.code === 'resource-exhausted';
+
+      if (isQuotaError) {
+        console.warn(`[Hierarchy] Firebase Quota Exceeded. Activating circuit breaker for 30 minutes.`);
+        (global as any).firebaseQuotaExceededUntil = now + 30 * 60 * 1000; // 30 minutes cooldown
       }
       console.log("[Hierarchy] Falling back to ClickUp API...");
       

@@ -75,6 +75,7 @@ import MacroOperations from './pages/MacroOperations';
 import Login from './pages/Login';
 import Debug from './pages/Debug';
 import ExecutionLog from './pages/ExecutionLog';
+import SyncManager from './components/SyncManager';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 
@@ -93,6 +94,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
       <main className={`flex-1 p-8 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
         {children}
       </main>
+      <SyncManager />
     </div>
   );
 };

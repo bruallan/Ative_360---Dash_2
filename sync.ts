@@ -1,9 +1,25 @@
-import cron from 'node-cron';
-import { db } from './firebase.js';
+import { db } from './src/firebase.js';
 import { doc, setDoc, writeBatch, collection, getDocs, deleteDoc } from 'firebase/firestore';
 import { CLICKUP_IDS, SECTORS } from './src/constants.js';
 
 const apiToken = process.env.CLICKUP_API_TOKEN;
+
+async function updateSyncStatus(status: string, progress: number, message: string) {
+  try {
+    await setDoc(doc(db, 'cache', 'sync_status'), {
+      status,
+      progress,
+      message,
+      updatedAt: Date.now()
+    });
+  } catch (e: any) {
+    if (e.message?.includes("Quota limit exceeded") || e.code === 'resource-exhausted') {
+      console.warn("[Sync] Quota exceeded while updating status. Stopping status updates.");
+      return;
+    }
+    console.error("[Sync] Error updating status:", e);
+  }
+}
 
 async function fetchAllPages(url: string) {
   let allItems: any[] = [];
@@ -84,14 +100,17 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any
 export async function runSync() {
   if (!apiToken) {
     console.error("[Sync] CLICKUP_API_TOKEN not found. Skipping sync.");
+    await updateSyncStatus('error', 0, 'CLICKUP_API_TOKEN not found');
     return;
   }
 
   console.log("[Sync] Starting synchronization with ClickUp...");
+  await updateSyncStatus('running', 5, 'Iniciando sincronização...');
 
   try {
     // 1. Sync Members
     console.log("[Sync] Fetching members...");
+    await updateSyncStatus('running', 10, 'Sincronizando membros da equipe...');
     const membersRes = await fetch("https://api.clickup.com/api/v2/team", {
       headers: { "Authorization": apiToken }
     });
@@ -108,6 +127,7 @@ export async function runSync() {
     // 2. Sync Hierarchy
     if (teamId) {
       console.log(`[Sync] Fetching hierarchy for team ${teamId}...`);
+      await updateSyncStatus('running', 20, 'Sincronizando hierarquia de pastas...');
       const spacesRes = await fetch(`https://api.clickup.com/api/v2/team/${teamId}/space`, {
         headers: { "Authorization": apiToken }
       });
@@ -138,8 +158,14 @@ export async function runSync() {
     }
 
     // 3. Sync Tasks for Folders
-    for (const sector of SECTORS) {
+    const totalSectors = SECTORS.length;
+    for (let i = 0; i < totalSectors; i++) {
+      const sector = SECTORS[i];
       console.log(`[Sync] Fetching lists for folder ${sector.name} (${sector.id})...`);
+      
+      const progress = 30 + Math.floor((i / totalSectors) * 40); // 30% to 70%
+      await updateSyncStatus('running', progress, `Sincronizando tarefas: ${sector.name}...`);
+
       const listsRes = await fetch(`https://api.clickup.com/api/v2/folder/${sector.id}/list?archived=false`, {
         headers: { "Authorization": apiToken }
       });
@@ -158,8 +184,15 @@ export async function runSync() {
     }
 
     // 4. Sync Tasks for specific Lists
-    for (const [key, listId] of Object.entries(CLICKUP_IDS.LISTS)) {
+    const listEntries = Object.entries(CLICKUP_IDS.LISTS);
+    const totalLists = listEntries.length;
+    for (let i = 0; i < totalLists; i++) {
+      const [key, listId] = listEntries[i];
       console.log(`[Sync] Fetching tasks for list ${key} (${listId})...`);
+      
+      const progress = 70 + Math.floor((i / totalLists) * 25); // 70% to 95%
+      await updateSyncStatus('running', progress, `Sincronizando lista: ${key}...`);
+
       const listTaskUrl = `https://api.clickup.com/api/v2/list/${listId}/task?subtasks=true&include_closed=true`;
       const tasks = await fetchAllPages(listTaskUrl);
       
@@ -167,12 +200,10 @@ export async function runSync() {
     }
 
     console.log("[Sync] Synchronization completed successfully.");
-  } catch (error) {
+    await updateSyncStatus('idle', 100, 'Sincronização concluída com sucesso!');
+  } catch (error: any) {
     console.error("[Sync] Error during synchronization:", error);
+    await updateSyncStatus('error', 0, `Erro: ${error.message}`);
   }
 }
 
-// Schedule to run every 4 hours (6 times a day)
-cron.schedule('0 */4 * * *', () => {
-  runSync();
-});
