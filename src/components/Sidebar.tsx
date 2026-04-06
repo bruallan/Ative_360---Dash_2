@@ -47,7 +47,6 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
               src="https://ative360.com/wp-content/uploads/2025/02/Logo-branca.webp" 
               alt="ative 360" 
               className="w-full h-full object-contain"
-              referrerPolicy="no-referrer"
             />
         </div>
         {isOpen && (
