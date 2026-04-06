@@ -72,27 +72,29 @@ function cleanTask(task: any) {
   return {
     id: task.id,
     name: task.name,
-    status: {
-      status: task.status?.status,
-      color: task.status?.color,
-      type: task.status?.type
-    },
+    status: task.status ? {
+      status: task.status.status,
+      color: task.status.color,
+      type: task.status.type
+    } : undefined,
     due_date: task.due_date,
     date_created: task.date_created,
     date_closed: task.date_closed,
     assignees: task.assignees?.map((a: any) => ({
+      id: a.id,
       username: a.username,
       color: a.color,
       profilePicture: a.profilePicture
     })),
-    list: {
-      id: task.list?.id,
-      name: task.list?.name
-    },
+    list: task.list ? {
+      id: task.list.id,
+      name: task.list.name
+    } : undefined,
     custom_fields: task.custom_fields?.filter((f: any) => f.name === 'Cliente').map((f: any) => ({
       name: f.name,
       value: f.value,
-      type: f.type
+      type: f.type,
+      type_config: f.type_config
     })),
     url: task.url,
     creator: task.creator ? {

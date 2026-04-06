@@ -24,7 +24,7 @@ export default async function hierarchyHandler(req: IncomingMessage, res: Server
 
       let db: any = null;
       try {
-        const firebaseModule = await import('../src/firebase');
+        const firebaseModule = await import('../src/firebase.js');
         db = firebaseModule.db;
       } catch (importError) {
         console.warn("[API] Could not load Firebase module, bypassing cache:", importError);

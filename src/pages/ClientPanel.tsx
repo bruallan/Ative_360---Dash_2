@@ -335,15 +335,15 @@ export default function ClientPanel() {
                     <div className="flex justify-between items-start gap-2">
                       <h4 className="font-medium text-slate-900 text-sm">{task.name}</h4>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium uppercase ${
-                        task.status.status === 'entregue' || task.status.status === 'complete' 
+                        task.status?.status === 'entregue' || task.status?.status === 'complete' 
                           ? 'bg-emerald-100 text-emerald-700' 
                           : 'bg-amber-100 text-amber-700'
                       }`}>
-                        {task.status.status}
+                        {task.status?.status || 'Sem Status'}
                       </span>
                     </div>
                     <div className="mt-2 flex items-center gap-4 text-xs text-slate-500">
-                      <span>Criado: {format(new Date(parseInt(task.date_created)), 'dd/MM/yyyy')}</span>
+                      <span>Criado: {task.date_created ? format(new Date(parseInt(task.date_created)), 'dd/MM/yyyy') : '-'}</span>
                       {task.due_date && (
                         <span>Prazo: {format(new Date(parseInt(task.due_date)), 'dd/MM/yyyy')}</span>
                       )}

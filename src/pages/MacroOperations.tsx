@@ -16,7 +16,7 @@ const AssigneeCard = ({ tasks }: { tasks: any[] }) => {
   // Get unique assignees
   const assigneesMap = new Map<string, any>();
   tasks.forEach(t => {
-    t.assignees.forEach((a: any) => {
+    t.assignees?.forEach((a: any) => {
       assigneesMap.set(a.id, a);
     });
   });
@@ -104,7 +104,7 @@ export default function MacroOperations() {
       }
 
       const row = clientsMap.get(clientName)!;
-      const listName = task.list.name;
+      const listName = task.list?.name || '';
 
       // Categorize
       // Note: We need to be careful. Is 'GT' prefix standard?

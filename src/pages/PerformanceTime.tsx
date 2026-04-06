@@ -77,7 +77,7 @@ export default function PerformanceTime() {
       // 3. Process Data per Member
       const processedMembers = members.map((member: any) => {
         const memberTasks = allTasks.filter((t: any) => {
-          return t.assignees.some((a: any) => a.id === member.id);
+          return t.assignees?.some((a: any) => a.id === member.id);
         });
 
         let completed = 0;
@@ -104,8 +104,8 @@ export default function PerformanceTime() {
             filteredTasks = filteredTasks.filter((t: any) => isTaskCompletedInPeriod(t, compStart, compEnd.getTime()));
           }
 
-          const completedTasksList = filteredTasks.filter((t: any) => ['entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase()));
-          const activeTasksList = filteredTasks.filter((t: any) => !['entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase()));
+          const completedTasksList = filteredTasks.filter((t: any) => ['entregue', 'complete', 'closed'].includes(t.status?.status?.toLowerCase() || ''));
+          const activeTasksList = filteredTasks.filter((t: any) => !['entregue', 'complete', 'closed'].includes(t.status?.status?.toLowerCase() || ''));
           const overdueTasksList = activeTasksList.filter((t: any) => {
             const due = t.due_date ? parseInt(t.due_date) : null;
             return due && due < Date.now();
@@ -488,11 +488,11 @@ export default function PerformanceTime() {
                     {getFilteredMemberTasks(selectedMember.tasks)
                       .filter((t: any) => {
                         if (isModalAdvancedFilter) {
-                          return ['a fazer', 'to do', 'open'].includes(t.status.status.toLowerCase());
+                          return ['a fazer', 'to do', 'open'].includes(t.status?.status?.toLowerCase() || '');
                         }
                         const isCompletedInPeriod = isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999));
                         if (isCompletedInPeriod) return false;
-                        return ['a fazer', 'to do', 'open'].includes(t.status.status.toLowerCase());
+                        return ['a fazer', 'to do', 'open'].includes(t.status?.status?.toLowerCase() || '');
                       })
                       .map((task: any) => (
                         <TaskCard key={task.id} task={task} />
@@ -509,8 +509,8 @@ export default function PerformanceTime() {
                   <div className="space-y-3">
                     {getFilteredMemberTasks(selectedMember.tasks)
                       .filter((t: any) => {
-                        const isCurrentlyCompleted = ['entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase());
-                        const isCurrentlyToDo = ['a fazer', 'to do', 'open'].includes(t.status.status.toLowerCase());
+                        const isCurrentlyCompleted = ['entregue', 'complete', 'closed'].includes(t.status?.status?.toLowerCase() || '');
+                        const isCurrentlyToDo = ['a fazer', 'to do', 'open'].includes(t.status?.status?.toLowerCase() || '');
                         
                         if (isModalAdvancedFilter) {
                           return !isCurrentlyToDo && !isCurrentlyCompleted;
@@ -539,7 +539,7 @@ export default function PerformanceTime() {
                     {getFilteredMemberTasks(selectedMember.tasks)
                       .filter((t: any) => {
                         if (isModalAdvancedFilter) {
-                           return ['entregue', 'complete', 'closed'].includes(t.status.status.toLowerCase());
+                           return ['entregue', 'complete', 'closed'].includes(t.status?.status?.toLowerCase() || '');
                         }
                         return isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999));
                       })
@@ -560,10 +560,10 @@ export default function PerformanceTime() {
 const TaskCard = ({ task }: { task: any; key?: string | number }) => (
   <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all">
     <div className="flex justify-between items-start gap-2 mb-2">
-      <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{task.list.name}</span>
+      <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{task.list?.name || 'Sem Lista'}</span>
       {task.due_date && (
         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-          parseInt(task.due_date) < Date.now() && !['entregue', 'complete', 'closed'].includes(task.status.status)
+          parseInt(task.due_date) < Date.now() && !['entregue', 'complete', 'closed'].includes(task.status?.status || '')
             ? 'bg-red-100 text-red-600'
             : 'bg-slate-100 text-slate-500'
         }`}>
@@ -574,11 +574,11 @@ const TaskCard = ({ task }: { task: any; key?: string | number }) => (
     <h5 className="text-sm font-medium text-slate-900 line-clamp-2 mb-2" title={task.name}>{task.name}</h5>
     <div className="flex items-center justify-between mb-3">
       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium uppercase ${
-        task.status.status === 'entregue' || task.status.status === 'complete' 
+        task.status?.status === 'entregue' || task.status?.status === 'complete' 
           ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
           : 'bg-slate-50 text-slate-600 border border-slate-100'
       }`}>
-        {task.status.status}
+        {task.status?.status || 'Sem Status'}
       </span>
     </div>
     <div className="flex flex-col gap-1 pt-2 border-t border-slate-100">

@@ -65,7 +65,7 @@ export default function Overview() {
       const completedOnTime = completedTasks.filter((t: any) => isTaskCompletedOnTimeInPeriod(t, startDate, endDateMs));
 
       // Active breakdown
-      const activeNew = activeTasks.filter((t: any) => parseInt(t.date_created) >= startDate).length;
+      const activeNew = activeTasks.filter((t: any) => t.date_created && parseInt(t.date_created) >= startDate).length;
       const activeOld = activeTasks.length - activeNew;
 
       totalActive += activeTasks.length;

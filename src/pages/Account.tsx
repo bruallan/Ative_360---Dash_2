@@ -13,9 +13,9 @@ const TaskCard: React.FC<{ task: any }> = ({ task }) => (
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span 
             className="px-2 py-0.5 rounded text-white font-medium"
-            style={{ backgroundColor: task.status.color }}
+            style={{ backgroundColor: task.status?.color || '#cbd5e1' }}
           >
-            {task.status.status.toUpperCase()}
+            {task.status?.status?.toUpperCase() || 'SEM STATUS'}
           </span>
           {task.due_date && (
             <span className={clsx(
@@ -29,7 +29,7 @@ const TaskCard: React.FC<{ task: any }> = ({ task }) => (
         </div>
       </div>
       <div className="flex -space-x-2">
-        {task.assignees.map((assignee: any) => (
+        {task.assignees?.map((assignee: any) => (
           <div 
             key={assignee.id}
             className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold ring-2 ring-white"
@@ -61,8 +61,8 @@ export default function Account() {
   useEffect(() => {
     if (allTasks.length > 0) {
       // Filter by List ID
-      const meetingsTasks = allTasks.filter((t: any) => t.list.id === CLICKUP_IDS.LISTS.ACC_REUNIOES);
-      const demandsTasks = allTasks.filter((t: any) => t.list.id === CLICKUP_IDS.LISTS.ACC_DEMANDAS);
+      const meetingsTasks = allTasks.filter((t: any) => t.list?.id === CLICKUP_IDS.LISTS.ACC_REUNIOES);
+      const demandsTasks = allTasks.filter((t: any) => t.list?.id === CLICKUP_IDS.LISTS.ACC_DEMANDAS);
       
       setMeetings(meetingsTasks);
       setDemands(demandsTasks);
