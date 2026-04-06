@@ -61,8 +61,8 @@ export default function Account() {
   useEffect(() => {
     if (allTasks.length > 0) {
       // Filter by List ID
-      const meetingsTasks = allTasks.filter((t: any) => t.list?.id === CLICKUP_IDS.LISTS.ACC_REUNIOES);
-      const demandsTasks = allTasks.filter((t: any) => t.list?.id === CLICKUP_IDS.LISTS.ACC_DEMANDAS);
+      const meetingsTasks = allTasks.filter((t: any) => String(t.list?.id) === String(CLICKUP_IDS.LISTS.ACC_REUNIOES));
+      const demandsTasks = allTasks.filter((t: any) => String(t.list?.id) === String(CLICKUP_IDS.LISTS.ACC_DEMANDAS));
       
       setMeetings(meetingsTasks);
       setDemands(demandsTasks);

@@ -108,21 +108,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const uniqueClients = new Set<string>();
       uniqueTasks.forEach((task: any) => {
         const clientField = task.custom_fields?.find((f: any) => f.name === 'Cliente');
-        if (clientField && clientField.value) {
+        if (clientField && clientField.value !== undefined && clientField.value !== null) {
           if (clientField.type === 'drop_down') {
-             const option = clientField.type_config.options.find((o: any) => o.orderindex === clientField.value);
-             if (option) uniqueClients.add(option.name);
-          } else if (typeof clientField.value === 'string') {
-             uniqueClients.add(clientField.value);
+             const option = clientField.type_config?.options?.find((o: any) => o.orderindex === clientField.value);
+             if (option) uniqueClients.add(String(option.name));
+          } else if (clientField.value) {
+             uniqueClients.add(String(clientField.value));
           }
-        } else {
-           // Fallback to brackets removed as per request
-           // const match = task.name.match(/\[(.*?)\]/);
-           // if (match) uniqueClients.add(match[1]);
         }
       });
 
-      setClients(Array.from(uniqueClients).sort());
+      setClients(Array.from(uniqueClients).sort((a, b) => String(a).localeCompare(String(b))));
 
     } catch (err) {
       console.error(err);

@@ -77,7 +77,7 @@ export default function PerformanceTime() {
       // 3. Process Data per Member
       const processedMembers = members.map((member: any) => {
         const memberTasks = allTasks.filter((t: any) => {
-          return t.assignees?.some((a: any) => a.id === member.id);
+          return t.assignees?.some((a: any) => String(a.id) === String(member.id));
         });
 
         let completed = 0;

@@ -84,6 +84,7 @@ function cleanTask(task: any) {
       id: a.id,
       username: a.username,
       color: a.color,
+      initials: a.initials,
       profilePicture: a.profilePicture
     })),
     list: task.list ? {
@@ -100,6 +101,7 @@ function cleanTask(task: any) {
     creator: task.creator ? {
       username: task.creator.username,
       color: task.creator.color,
+      initials: task.creator.initials,
       profilePicture: task.creator.profilePicture
     } : undefined
   };

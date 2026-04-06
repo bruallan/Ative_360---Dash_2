@@ -84,19 +84,13 @@ export default function MacroOperations() {
       let clientName = 'Sem Cliente';
       const clientField = task.custom_fields?.find((f: any) => f.name === 'Cliente');
       
-      if (clientField && clientField.value) {
+      if (clientField && clientField.value !== undefined && clientField.value !== null) {
         if (clientField.type === 'drop_down') {
-           const option = clientField.type_config.options.find((o: any) => o.orderindex === clientField.value);
-           if (option) clientName = option.name;
-        } else if (typeof clientField.value === 'string') {
-           clientName = clientField.value;
+           const option = clientField.type_config?.options?.find((o: any) => o.orderindex === clientField.value);
+           if (option) clientName = String(option.name);
+        } else if (clientField.value) {
+           clientName = String(clientField.value);
         }
-      } else {
-        // Fallback to brackets removed
-        // const match = task.name.match(/\[(.*?)\]/);
-        // if (match) {
-        //   clientName = match[1];
-        // }
       }
 
       if (!clientsMap.has(clientName)) {
@@ -107,23 +101,20 @@ export default function MacroOperations() {
       const listName = task.list?.name || '';
 
       // Categorize
-      // Note: We need to be careful. Is 'GT' prefix standard?
-      // The user requirement said:
-      // Gestão de Tráfego (GT): Tarefas na pasta de Tráfego que começam com "GT".
-      // Gestão de Conteúdo (GC): Tarefas na pasta de Conteúdo que começam com "GC".
-      // Design/Criativo: Todo o restante.
-
       if (task.sector === 'Gestão de Tráfego' && listName.startsWith('GT')) {
         row.gt.push(task);
       } else if (task.sector === 'Gestão de Conteúdo' && listName.startsWith('GC')) {
         row.gc.push(task);
       } else {
-        // Design/Criativo (Everything else in these folders)
         row.design.push(task);
       }
     });
 
-    const sortedRows = Array.from(clientsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const sortedRows = Array.from(clientsMap.values()).sort((a, b) => {
+      const nameA = String(a.name || '');
+      const nameB = String(b.name || '');
+      return nameA.localeCompare(nameB);
+    });
     setClientRows(sortedRows);
   };
 

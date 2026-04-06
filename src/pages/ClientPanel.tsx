@@ -102,14 +102,14 @@ export default function ClientPanel() {
 
     const clientTasks = tasks.filter((task: any) => {
       const clientField = task.custom_fields?.find((f: any) => f.name === 'Cliente');
-      if (!clientField || !clientField.value) return false;
+      if (!clientField || (clientField.value === undefined || clientField.value === null)) return false;
       
       let clientName = '';
       if (clientField.type === 'drop_down') {
-         const option = clientField.type_config.options.find((o: any) => o.orderindex === clientField.value);
-         if (option) clientName = option.name;
-      } else {
-         clientName = clientField.value;
+         const option = clientField.type_config?.options?.find((o: any) => o.orderindex === clientField.value);
+         if (option) clientName = String(option.name);
+      } else if (clientField.value) {
+         clientName = String(clientField.value);
       }
       return clientName === selectedClient;
     });

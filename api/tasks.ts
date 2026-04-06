@@ -61,9 +61,22 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
       const querySnapshot = await getDocs(collection(db, `cache_${type}_${id}`));
       
       querySnapshot.forEach(doc => {
-        const chunkData = JSON.parse(doc.data().data);
-        tasks = tasks.concat(chunkData);
+        const docData = doc.data();
+        if (docData && docData.data) {
+          try {
+            const chunkData = JSON.parse(docData.data);
+            if (Array.isArray(chunkData)) {
+              tasks = tasks.concat(chunkData);
+            } else {
+              console.warn(`[API] Chunk data is not an array for ${doc.id}`);
+            }
+          } catch (parseError) {
+            console.error(`[API] Error parsing chunk data for ${doc.id}:`, parseError);
+          }
+        }
       });
+
+      console.log(`[API] Total tasks fetched from Firebase for ${type} ${id}: ${tasks.length}`);
 
       if (tasks.length === 0) {
         throw new Error("Cache empty");
