@@ -80,7 +80,7 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any
     console.error(`[Sync] Error deleting old chunks for ${type} ${id}:`, e);
   }
 
-  const chunkSize = 200; // 200 tasks per chunk to stay well under 1MB
+  const chunkSize = 40; // 40 tasks per chunk to stay well under 1MB
   const chunks = [];
   for (let i = 0; i < tasks.length; i += chunkSize) {
     chunks.push(tasks.slice(i, i + chunkSize));
