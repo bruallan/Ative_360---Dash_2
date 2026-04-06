@@ -67,8 +67,47 @@ async function fetchAllPages(url: string) {
   return allItems;
 }
 
+function cleanTask(task: any) {
+  // Only keep the fields we actually use in the UI to save space
+  return {
+    id: task.id,
+    name: task.name,
+    status: {
+      status: task.status?.status,
+      color: task.status?.color,
+      type: task.status?.type
+    },
+    due_date: task.due_date,
+    date_created: task.date_created,
+    date_closed: task.date_closed,
+    assignees: task.assignees?.map((a: any) => ({
+      username: a.username,
+      color: a.color,
+      profilePicture: a.profilePicture
+    })),
+    list: {
+      id: task.list?.id,
+      name: task.list?.name
+    },
+    custom_fields: task.custom_fields?.filter((f: any) => f.name === 'Cliente').map((f: any) => ({
+      name: f.name,
+      value: f.value,
+      type: f.type
+    })),
+    url: task.url,
+    creator: task.creator ? {
+      username: task.creator.username,
+      color: task.creator.color,
+      profilePicture: task.creator.profilePicture
+    } : undefined
+  };
+}
+
 async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any[]) {
   console.log(`[Sync] Saving ${tasks.length} tasks for ${type} ${id} in chunks...`);
+  
+  // Clean tasks before saving to reduce size
+  const cleanedTasks = tasks.map(cleanTask);
   
   // First, delete existing chunks for this id to avoid stale data
   try {
@@ -81,14 +120,20 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any
   }
 
   // Dynamic chunking based on size
-  const maxBytes = 850000; // 850KB limit (Firestore is 1MB, leaving margin for overhead)
+  const maxBytes = 800000; // 800KB limit (Firestore is 1MB, leaving margin for overhead)
   const chunks: any[][] = [];
   let currentChunk: any[] = [];
   let currentSize = 0;
 
-  for (const task of tasks) {
+  for (const task of cleanedTasks) {
     const taskStr = JSON.stringify(task);
     const taskSize = taskStr.length; // Approximation of bytes
+
+    // If a single task is somehow still > 800KB, skip it with a warning
+    if (taskSize > maxBytes) {
+      console.warn(`[Sync] Task ${task.id} is too large (${taskSize} bytes) even after cleaning. Skipping.`);
+      continue;
+    }
 
     if (currentSize + taskSize > maxBytes && currentChunk.length > 0) {
       chunks.push(currentChunk);
