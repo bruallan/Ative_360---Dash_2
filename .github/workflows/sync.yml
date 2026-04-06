@@ -1,0 +1,28 @@
+name: ClickUp to Firebase Sync
+
+on:
+  schedule:
+    # Roda a cada 4 horas
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Permite rodar manualmente pelo painel do GitHub Actions
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Sync
+        env:
+          CLICKUP_API_TOKEN: ${{ secrets.CLICKUP_API_TOKEN }}
+        run: npm run sync:once
