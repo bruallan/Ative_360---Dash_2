@@ -80,20 +80,46 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any
     console.error(`[Sync] Error deleting old chunks for ${type} ${id}:`, e);
   }
 
-  const chunkSize = 40; // 40 tasks per chunk to stay well under 1MB
-  const chunks = [];
-  for (let i = 0; i < tasks.length; i += chunkSize) {
-    chunks.push(tasks.slice(i, i + chunkSize));
-  }
+  // Dynamic chunking based on size
+  const maxBytes = 850000; // 850KB limit (Firestore is 1MB, leaving margin for overhead)
+  const chunks: any[][] = [];
+  let currentChunk: any[] = [];
+  let currentSize = 0;
 
-  const batch = writeBatch(db);
-  for (let i = 0; i < chunks.length; i++) {
-    const chunkRef = doc(db, `cache_${type}_${id}`, `chunk_${i}`);
-    batch.set(chunkRef, { data: JSON.stringify(chunks[i]) });
+  for (const task of tasks) {
+    const taskStr = JSON.stringify(task);
+    const taskSize = taskStr.length; // Approximation of bytes
+
+    if (currentSize + taskSize > maxBytes && currentChunk.length > 0) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentSize = 0;
+    }
+    currentChunk.push(task);
+    currentSize += taskSize;
   }
   
-  if (chunks.length > 0) {
-    await batch.commit();
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  console.log(`[Sync] Split into ${chunks.length} chunks.`);
+
+  // Use batches to save chunks (max 500 operations per batch)
+  const MAX_BATCH_SIZE = 400;
+  for (let i = 0; i < chunks.length; i += MAX_BATCH_SIZE) {
+    const batch = writeBatch(db);
+    const chunkSlice = chunks.slice(i, i + MAX_BATCH_SIZE);
+    
+    chunkSlice.forEach((chunk, index) => {
+      const globalIndex = i + index;
+      const chunkRef = doc(db, `cache_${type}_${id}`, `chunk_${globalIndex}`);
+      batch.set(chunkRef, { data: JSON.stringify(chunk) });
+    });
+    
+    if (chunkSlice.length > 0) {
+      await batch.commit();
+    }
   }
 }
 
