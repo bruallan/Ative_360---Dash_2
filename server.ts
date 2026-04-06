@@ -6,10 +6,23 @@ import { dirname } from 'path';
 import fs from 'fs';
 import path from 'path';
 
-// Import handlers for production server
-// Note: In a real production build, these would need to be compiled or handled differently
-// For this environment, we can import them directly if using ts-node/tsx
+// Suppress benign Firebase gRPC idle timeout errors that clutter the logs
+const originalConsoleError = console.error;
+console.error = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes("CANCELLED: Disconnecting idle stream")) {
+    return; // Ignore this specific benign warning
+  }
+  originalConsoleError(...args);
+};
+
+// Import handlers
 import clientLinksHandler from './api/client-links.js';
+import membersHandler from './api/members.js';
+import tasksHandler from './api/tasks.js';
+import hierarchyHandler from './api/hierarchy.js';
+
+// Import sync script to start cron job
+import { runSync } from './sync.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,56 +35,15 @@ async function startServer() {
   app.use(express.json());
 
   // API Routes
-  app.all("/api/client-links", (req, res) => {
-    clientLinksHandler(req, res);
-  });
+  app.all("/api/client-links", (req, res) => clientLinksHandler(req, res));
+  app.all("/api/members", (req, res) => membersHandler(req, res));
+  app.all("/api/tasks", (req, res) => tasksHandler(req, res));
+  app.all("/api/hierarchy", (req, res) => hierarchyHandler(req, res));
 
-  app.get("/api/members", async (req, res) => {
-    try {
-      console.log("[API] Starting request to ClickUp...");
-      
-      const apiToken = process.env.CLICKUP_API_TOKEN;
-      
-      if (!apiToken) {
-        console.error("[API] No token found");
-        return res.status(500).json({ 
-          error: "API Token not configured in environment variables.",
-          details: "Check your .env file."
-        });
-      }
-
-      console.log("[API] Token found (masked):", apiToken.substring(0, 4) + "...");
-      const url = "https://api.clickup.com/api/v2/team";
-      
-      console.log(`[API] Fetching ${url}...`);
-      const response = await fetch(url, {
-        headers: {
-          "Authorization": apiToken
-        }
-      });
-
-      console.log(`[API] Response status: ${response.status}`);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[API] Error body: ${errorText}`);
-        return res.status(response.status).json({ 
-          error: `ClickUp API Error: ${response.status}`, 
-          details: errorText 
-        });
-      }
-
-      const data = await response.json();
-      console.log("[API] Success. Returning data.");
-      res.json(data);
-
-    } catch (error: any) {
-      console.error("[API] Exception:", error);
-      res.status(500).json({ 
-        error: "Internal Server Error", 
-        details: error.message 
-      });
-    }
+  app.post("/api/sync", async (req, res) => {
+    // Manual trigger for sync
+    runSync();
+    res.json({ status: "Sync started in background" });
   });
 
   app.get("/api/health", (req, res) => {

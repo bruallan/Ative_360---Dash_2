@@ -1,70 +1,57 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { db } from '../firebase.js';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default async function membersHandler(req: IncomingMessage, res: ServerResponse) {
-  // Set JSON content type immediately
   res.setHeader('Content-Type', 'application/json');
 
   try {
-    console.log("[API] Starting request to ClickUp...");
-    
-    // In Vite config context, process.env might need loading or is already available
-    const apiToken = process.env.CLICKUP_API_TOKEN;
-    
-    if (!apiToken) {
-      console.error("[API] No token found");
-      res.statusCode = 500;
-      res.end(JSON.stringify({ 
-        error: "API Token not configured in environment variables.",
-        details: "Check your .env file."
-      }));
-      return;
-    }
+    const now = Date.now();
+    const quotaExceededUntil = (global as any).firebaseQuotaExceededUntil || 0;
 
-    console.log("[API] Token found (masked):", apiToken.substring(0, 4) + "...");
-    const url = "https://api.clickup.com/api/v2/team";
-    
-    console.log(`[API] Fetching ${url}...`);
-    
-    let retries = 3;
-    let response;
-    while (retries > 0) {
-      try {
-        response = await fetch(url, {
-          headers: {
-            "Authorization": apiToken,
-            "User-Agent": "Node.js/Fetch",
-            "Connection": "keep-alive"
-          }
-        });
-        break;
-      } catch (err: any) {
-        retries--;
-        if (retries === 0) throw err;
-        await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      if (now < quotaExceededUntil) {
+        throw new Error("Quota previously exceeded (Circuit Breaker active)");
       }
+
+      console.log("[API] Fetching members from Firebase...");
+      const docRef = doc(db, 'cache', 'members');
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = JSON.parse(docSnap.data().data);
+        res.end(JSON.stringify(data));
+        return;
+      } else {
+        throw new Error("Cache empty");
+      }
+    } catch (firebaseError: any) {
+      if (firebaseError.message.includes("Quota limit exceeded")) {
+        console.warn(`[API] Firebase Quota Exceeded. Activating circuit breaker.`);
+        (global as any).firebaseQuotaExceededUntil = now + 10 * 60 * 1000;
+      }
+      console.log("[API] Falling back to ClickUp API for members...");
+      
+      const apiToken = process.env.CLICKUP_API_TOKEN;
+      if (!apiToken) throw new Error("API Token not configured in environment variables.");
+
+      const url = "https://api.clickup.com/api/v2/team";
+      const response = await fetch(url, {
+        headers: {
+          "Authorization": apiToken,
+          "User-Agent": "Node.js/Fetch",
+          "Connection": "keep-alive"
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`ClickUp API Error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      res.end(JSON.stringify(data));
     }
-
-    if (!response) {
-      throw new Error("Failed to fetch after retries");
-    }
-
-    console.log(`[API] Response status: ${response.status}`);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[API] Error body: ${errorText}`);
-      res.statusCode = response.status;
-      res.end(JSON.stringify({ 
-        error: `ClickUp API Error: ${response.status}`, 
-        details: errorText 
-      }));
-      return;
-    }
-
-    const data = await response.json();
-    console.log("[API] Success. Returning data.");
-    res.end(JSON.stringify(data));
-
   } catch (error: any) {
     console.error("[API] Exception:", error);
     res.statusCode = 500;

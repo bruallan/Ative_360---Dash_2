@@ -1,126 +1,148 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { URL } from 'url';
+import { db } from '../firebase.js';
+import { collection, getDocs } from 'firebase/firestore';
 
 export default async function tasksHandler(req: IncomingMessage, res: ServerResponse) {
   res.setHeader('Content-Type', 'application/json');
 
   try {
-    const apiToken = process.env.CLICKUP_API_TOKEN;
-    if (!apiToken) {
-      throw new Error("API Token not configured");
-    }
-
     const protocol = req.headers.host?.includes('localhost') ? 'http' : 'https';
     const currentUrl = new URL(req.url || '', `${protocol}://${req.headers.host}`);
     
-    // Parameters
-    const teamId = currentUrl.searchParams.get('team_id');
     const folderId = currentUrl.searchParams.get('folder_id');
     const listId = currentUrl.searchParams.get('list_id');
+    const page = currentUrl.searchParams.get('page') || '0';
     const includeSubtasks = currentUrl.searchParams.get('subtasks') || 'true';
     const archived = currentUrl.searchParams.get('archived') || 'false';
-    const page = currentUrl.searchParams.get('page') || '0';
 
-    let url = '';
+    let type = '';
+    let id = '';
+    if (folderId) {
+      type = 'folder';
+      id = folderId;
+    } else if (listId) {
+      type = 'list';
+      id = listId;
+    } else {
+      throw new Error("Missing folder_id or list_id");
+    }
 
-    if (listId) {
-      url = `https://api.clickup.com/api/v2/list/${listId}/task`;
+    let tasks: any[] = [];
+    let usedFallback = false;
+
+    // Simple circuit breaker: if we know quota is exceeded, skip Firebase for a while
+    const now = Date.now();
+    const quotaExceededUntil = (global as any).firebaseQuotaExceededUntil || 0;
+
+    try {
+      if (now < quotaExceededUntil) {
+        throw new Error("Quota previously exceeded (Circuit Breaker active)");
+      }
+
+      // If page > 0, return empty array because we fetch all tasks from Firebase at once
+      if (parseInt(page) > 0) {
+        res.end(JSON.stringify({ tasks: [] }));
+        return;
+      }
+
+      console.log(`[API] Fetching tasks for ${type} ${id} from Firebase...`);
+      const querySnapshot = await getDocs(collection(db, `cache_${type}_${id}`));
       
-      // Append query params
-      const params = new URLSearchParams({
-        page,
-        subtasks: includeSubtasks,
-        archived,
-        include_closed: 'true', // We need closed tasks for stats
+      querySnapshot.forEach(doc => {
+        const chunkData = JSON.parse(doc.data().data);
+        tasks = tasks.concat(chunkData);
       });
 
-      // Add date filters if provided
-      if (currentUrl.searchParams.has('date_created_gt')) {
-        params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
+      if (tasks.length === 0) {
+        throw new Error("Cache empty");
       }
-      if (currentUrl.searchParams.has('date_created_lt')) {
-        params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
+    } catch (firebaseError: any) {
+      if (firebaseError.message.includes("Quota limit exceeded")) {
+        console.warn(`[API] Firebase Quota Exceeded. Activating circuit breaker for 10 minutes.`);
+        (global as any).firebaseQuotaExceededUntil = now + 10 * 60 * 1000; // 10 minutes cooldown
       }
       
-      // Fetch
-      const finalUrl = `${url}?${params.toString()}`;
-      console.log(`[API] Fetching tasks: ${finalUrl}`);
+      console.log(`[API] Falling back to ClickUp API for ${type} ${id}...`);
+      usedFallback = true;
       
-      let retries = 3;
-      let response;
-      while (retries > 0) {
-        try {
-          response = await fetch(finalUrl, {
-            headers: { 
-              "Authorization": apiToken,
-              "User-Agent": "Node.js/Fetch",
-              "Connection": "keep-alive"
-            }
-          });
-          break;
-        } catch (err: any) {
-          retries--;
-          if (retries === 0) throw err;
-          await new Promise(resolve => setTimeout(resolve, 1000));
+      const apiToken = process.env.CLICKUP_API_TOKEN;
+      if (!apiToken) throw new Error("API Token not configured");
+
+      if (listId) {
+        const url = `https://api.clickup.com/api/v2/list/${listId}/task`;
+        const params = new URLSearchParams({
+          page,
+          subtasks: includeSubtasks,
+          archived,
+          include_closed: 'true',
+        });
+        if (currentUrl.searchParams.has('date_created_gt')) {
+          params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
         }
-      }
-
-      if (!response || !response.ok) {
-        const errorText = await response?.text();
-        throw new Error(`ClickUp API Error ${response?.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
-      res.end(JSON.stringify(data));
-
-    } else if (folderId) {
-      // ClickUp API v2 does not support GET /folder/{id}/task directly.
-      // We must fetch lists first, then fetch tasks for each list.
-      
-      // 1. Fetch Lists
-      const listsUrl = `https://api.clickup.com/api/v2/folder/${folderId}/list?archived=false`;
-      console.log(`[API] Fetching lists for folder: ${listsUrl}`);
-      
-      const listsResponse = await fetch(listsUrl, {
-        headers: { "Authorization": apiToken }
-      });
-
-      if (!listsResponse.ok) {
-        const errorText = await listsResponse.text();
-        throw new Error(`ClickUp API Error (Lists) ${listsResponse.status}: ${errorText}`);
-      }
-
-      const listsData = await listsResponse.json();
-      const lists = listsData.lists || [];
-
-      // 2. Fetch Tasks for each List (in batches to avoid ECONNRESET)
-      const allTasks = [];
-      const batchSize = 3;
-      
-      for (let i = 0; i < lists.length; i += batchSize) {
-        const batch = lists.slice(i, i + batchSize);
+        if (currentUrl.searchParams.has('date_created_lt')) {
+          params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
+        }
         
-        const batchPromises = batch.map(async (list: any) => {
-          const listTaskUrl = `https://api.clickup.com/api/v2/list/${list.id}/task`;
-          const params = new URLSearchParams({
-            page,
-            subtasks: includeSubtasks,
-            archived,
-            include_closed: 'true',
-          });
-          
-          if (currentUrl.searchParams.has('date_created_gt')) {
-            params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
+        const finalUrl = `${url}?${params.toString()}`;
+        console.log(`[API] Fetching tasks from ClickUp: ${finalUrl}`);
+        
+        const response = await fetch(finalUrl, {
+          headers: { 
+            "Authorization": apiToken,
+            "User-Agent": "Node.js/Fetch",
+            "Connection": "keep-alive"
           }
-          if (currentUrl.searchParams.has('date_created_lt')) {
-            params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
-          }
+        });
 
-          const finalUrl = `${listTaskUrl}?${params.toString()}`;
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`ClickUp API Error ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+        res.end(JSON.stringify(data));
+        return; // Exit early since we already sent the response
+
+      } else if (folderId) {
+        // Fetch Lists
+        const listsUrl = `https://api.clickup.com/api/v2/folder/${folderId}/list?archived=false`;
+        const listsResponse = await fetch(listsUrl, {
+          headers: { "Authorization": apiToken }
+        });
+
+        if (!listsResponse.ok) {
+          const errorText = await listsResponse.text();
+          throw new Error(`ClickUp API Error (Lists) ${listsResponse.status}: ${errorText}`);
+        }
+
+        const listsData = await listsResponse.json();
+        const lists = listsData.lists || [];
+
+        const allTasks = [];
+        const batchSize = 3;
+        
+        for (let i = 0; i < lists.length; i += batchSize) {
+          const batch = lists.slice(i, i + batchSize);
           
-          // Retry logic for ECONNRESET
-          let retries = 3;
-          while (retries > 0) {
+          const batchPromises = batch.map(async (list: any) => {
+            const listTaskUrl = `https://api.clickup.com/api/v2/list/${list.id}/task`;
+            const params = new URLSearchParams({
+              page,
+              subtasks: includeSubtasks,
+              archived,
+              include_closed: 'true',
+            });
+            
+            if (currentUrl.searchParams.has('date_created_gt')) {
+              params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
+            }
+            if (currentUrl.searchParams.has('date_created_lt')) {
+              params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
+            }
+
+            const finalUrl = `${listTaskUrl}?${params.toString()}`;
+            
             try {
               const response = await fetch(finalUrl, {
                 headers: { 
@@ -130,62 +152,38 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
                 }
               });
 
-              if (!response.ok) {
-                console.error(`Failed to fetch tasks for list ${list.id}: ${response.status}`);
-                return [];
-              }
-
+              if (!response.ok) return [];
               const data = await response.json();
               return data.tasks || [];
-            } catch (err: any) {
-              retries--;
-              if (retries === 0) {
-                console.error(`Error fetching tasks for list ${list.id} after retries:`, err);
-                return [];
-              }
-              // Wait before retrying
-              await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (err) {
+              return [];
             }
-          }
-          return [];
-        });
+          });
 
-        const results = await Promise.all(batchPromises);
-        allTasks.push(...results.flat());
-        
-        // Small delay between batches to prevent rate limiting
-        if (i + batchSize < lists.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          const results = await Promise.all(batchPromises);
+          allTasks.push(...results.flat());
         }
+        
+        tasks = allTasks;
       }
+    }
 
-      res.end(JSON.stringify({ tasks: allTasks }));
-
-    } else if (teamId) {
-      url = `https://api.clickup.com/api/v2/team/${teamId}/task`;
-      // ... (existing logic for team if needed, but we focus on folder fix)
-      // Re-implementing basic fetch for team to keep code clean if it was used
-      const params = new URLSearchParams({
-        page,
-        subtasks: includeSubtasks,
-        archived,
-        include_closed: 'true',
-      });
-       if (currentUrl.searchParams.has('date_created_gt')) {
-        params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
-      }
-      if (currentUrl.searchParams.has('date_created_lt')) {
-        params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
-      }
+    if (!usedFallback || folderId) {
+      // Optional: Filter by date if needed
+      const dateCreatedGt = currentUrl.searchParams.get('date_created_gt');
+      const dateCreatedLt = currentUrl.searchParams.get('date_created_lt');
       
-      const finalUrl = `${url}?${params.toString()}`;
-      const response = await fetch(finalUrl, { headers: { "Authorization": apiToken } });
-      if (!response.ok) throw new Error(`ClickUp API Error ${response.status}`);
-      const data = await response.json();
-      res.end(JSON.stringify(data));
+      let filteredTasks = tasks;
+      if (dateCreatedGt) {
+        const gt = parseInt(dateCreatedGt);
+        filteredTasks = filteredTasks.filter(t => parseInt(t.date_created) > gt);
+      }
+      if (dateCreatedLt) {
+        const lt = parseInt(dateCreatedLt);
+        filteredTasks = filteredTasks.filter(t => parseInt(t.date_created) < lt);
+      }
 
-    } else {
-      throw new Error("Missing team_id, folder_id, or list_id");
+      res.end(JSON.stringify({ tasks: filteredTasks }));
     }
 
   } catch (error: any) {

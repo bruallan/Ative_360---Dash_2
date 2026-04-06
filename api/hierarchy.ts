@@ -1,15 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { URL } from 'url';
+import { db } from '../firebase.js';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default async function hierarchyHandler(req: IncomingMessage, res: ServerResponse) {
   res.setHeader('Content-Type', 'application/json');
 
   try {
-    const apiToken = process.env.CLICKUP_API_TOKEN;
-    if (!apiToken) {
-      throw new Error("API Token not configured");
-    }
-
     const protocol = req.headers.host?.includes('localhost') ? 'http' : 'https';
     const currentUrl = new URL(req.url || '', `${protocol}://${req.headers.host}`);
     const teamId = currentUrl.searchParams.get('team_id');
@@ -18,36 +15,63 @@ export default async function hierarchyHandler(req: IncomingMessage, res: Server
        throw new Error("Missing team_id");
     }
 
-    // 1. Get Spaces
-    console.log(`[Hierarchy] Fetching spaces for team ${teamId}...`);
-    const spacesRes = await fetch(`https://api.clickup.com/api/v2/team/${teamId}/space`, {
-      headers: { "Authorization": apiToken }
-    });
-    const spacesData = await spacesRes.json();
-    
-    const hierarchy = [];
+    const now = Date.now();
+    const quotaExceededUntil = (global as any).firebaseQuotaExceededUntil || 0;
 
-    for (const space of spacesData.spaces) {
-      // 2. Get Folders for each space
-      const foldersRes = await fetch(`https://api.clickup.com/api/v2/space/${space.id}/folder`, {
+    try {
+      if (now < quotaExceededUntil) {
+        throw new Error("Quota previously exceeded (Circuit Breaker active)");
+      }
+
+      console.log(`[Hierarchy] Fetching hierarchy for team ${teamId} from Firebase...`);
+      const docRef = doc(db, 'cache', `hierarchy_${teamId}`);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = JSON.parse(docSnap.data().data);
+        res.end(JSON.stringify(data));
+        return;
+      } else {
+        throw new Error("Cache empty");
+      }
+    } catch (firebaseError: any) {
+      if (firebaseError.message.includes("Quota limit exceeded")) {
+        console.warn(`[Hierarchy] Firebase Quota Exceeded. Activating circuit breaker.`);
+        (global as any).firebaseQuotaExceededUntil = now + 10 * 60 * 1000;
+      }
+      console.log("[Hierarchy] Falling back to ClickUp API...");
+      
+      const apiToken = process.env.CLICKUP_API_TOKEN;
+      if (!apiToken) throw new Error("API Token not configured");
+
+      console.log(`[Hierarchy] Fetching spaces for team ${teamId}...`);
+      const spacesRes = await fetch(`https://api.clickup.com/api/v2/team/${teamId}/space`, {
         headers: { "Authorization": apiToken }
       });
-      const foldersData = await foldersRes.json();
+      const spacesData = await spacesRes.json();
+      
+      const hierarchy = [];
 
-      // 3. Get Folderless Lists for each space
-      const listsRes = await fetch(`https://api.clickup.com/api/v2/space/${space.id}/list`, {
-        headers: { "Authorization": apiToken }
-      });
-      const listsData = await listsRes.json();
+      for (const space of spacesData.spaces) {
+        const foldersRes = await fetch(`https://api.clickup.com/api/v2/space/${space.id}/folder`, {
+          headers: { "Authorization": apiToken }
+        });
+        const foldersData = await foldersRes.json();
 
-      hierarchy.push({
-        ...space,
-        folders: foldersData.folders,
-        lists: listsData.lists
-      });
+        const listsRes = await fetch(`https://api.clickup.com/api/v2/space/${space.id}/list`, {
+          headers: { "Authorization": apiToken }
+        });
+        const listsData = await listsRes.json();
+
+        hierarchy.push({
+          ...space,
+          folders: foldersData.folders,
+          lists: listsData.lists
+        });
+      }
+
+      res.end(JSON.stringify({ hierarchy }));
     }
-
-    res.end(JSON.stringify({ hierarchy }));
 
   } catch (error: any) {
     console.error("[Hierarchy] Error:", error);
