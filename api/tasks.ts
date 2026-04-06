@@ -49,7 +49,8 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
       try {
         // Dynamic import to prevent fatal crashes during Vercel serverless cold starts
         // if firebase-applet-config.json is missing or causes ESM issues.
-        const firebaseModule = await import('../src/firebase');
+        // In ESM, we often need the .js extension even for TS files after compilation.
+        const firebaseModule = await import('../src/firebase.js');
         db = firebaseModule.db;
       } catch (importError) {
         console.warn("[API] Could not load Firebase module, bypassing cache:", importError);
