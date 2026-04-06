@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { URL } from 'url';
-import { db } from '../src/firebase.js';
+import { db } from '../src/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
 export default async function hierarchyHandler(req: IncomingMessage, res: ServerResponse) {

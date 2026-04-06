@@ -1,6 +1,6 @@
-import { db } from './src/firebase.js';
+import { db } from './src/firebase';
 import { doc, setDoc, writeBatch, collection, getDocs, deleteDoc } from 'firebase/firestore';
-import { CLICKUP_IDS, SECTORS } from './src/constants.js';
+import { CLICKUP_IDS, SECTORS } from './src/constants';
 
 const apiToken = process.env.CLICKUP_API_TOKEN;
 

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { URL } from 'url';
-import { db } from '../src/firebase.js';
+import { db } from '../src/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
 export default async function tasksHandler(req: IncomingMessage, res: ServerResponse) {

@@ -1,6 +1,6 @@
-import { db } from './src/firebase.js';
+import { db } from './src/firebase';
 import { collection, getDocs } from 'firebase/firestore';
-import { CLICKUP_IDS, SECTORS } from './src/constants.js';
+import { CLICKUP_IDS, SECTORS } from './src/constants';
 
 async function checkChunks() {
   try {

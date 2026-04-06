@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { db } from '../src/firebase.js';
+import { db } from '../src/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
 export default async function membersHandler(req: IncomingMessage, res: ServerResponse) {

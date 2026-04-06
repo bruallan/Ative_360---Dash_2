@@ -1,4 +1,4 @@
-import { db } from './src/firebase.js';
+import { db } from './src/firebase';
 import { collection, getCountFromServer } from 'firebase/firestore';
 
 async function checkTasks() {
