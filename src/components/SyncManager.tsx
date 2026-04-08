@@ -38,7 +38,10 @@ export default function SyncManager() {
     }
   };
 
-  const isRunning = syncStatus?.status === 'running';
+  const isRunning = syncStatus?.status === 'running' && (Date.now() - (syncStatus.updatedAt || 0)) < 15 * 60 * 1000;
+
+  // Se passou de 15 minutos e ainda está "running", assumimos que deu erro de cota ou timeout
+  const isTimedOut = syncStatus?.status === 'running' && !isRunning;
 
   return (
     <>
@@ -60,6 +63,15 @@ export default function SyncManager() {
                {syncStatus.message} • {syncStatus.progress}%
              </span>
           </div>
+        </div>
+      )}
+
+      {isTimedOut && (
+        <div className="fixed top-2 right-4 bg-red-50 border border-red-200 rounded-full px-3 py-1 flex items-center space-x-2 shadow-sm animate-in fade-in slide-in-from-top-2 z-[100]">
+           <AlertTriangle className="w-3 h-3 text-red-600" />
+           <span className="text-[10px] font-semibold text-red-600 uppercase tracking-wider">
+             Sincronização interrompida (Timeout/Cota)
+           </span>
         </div>
       )}
 
