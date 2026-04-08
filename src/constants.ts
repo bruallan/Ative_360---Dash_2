@@ -21,4 +21,5 @@ export const SECTORS = [
   { id: CLICKUP_IDS.FOLDERS.CLIENTES_MACRO, name: 'Clientes Macro' },
   { id: CLICKUP_IDS.FOLDERS.GESTAO_TRAFEGO, name: 'Gestão de Tráfego' },
   { id: CLICKUP_IDS.FOLDERS.GESTAO_CONTEUDO, name: 'Gestão de Conteúdo' },
+  { id: 'outros', name: 'Outros' }
 ];

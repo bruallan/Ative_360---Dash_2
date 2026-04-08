@@ -232,47 +232,57 @@ export async function runSync() {
       }
     }
 
-    // 3. Sync Tasks for Folders
-    const totalSectors = SECTORS.length;
-    for (let i = 0; i < totalSectors; i++) {
-      const sector = SECTORS[i];
-      console.log(`[Sync] Fetching lists for folder ${sector.name} (${sector.id})...`);
-      
-      const progress = 30 + Math.floor((i / totalSectors) * 40); // 30% to 70%
-      await updateSyncStatus('running', progress, `Sincronizando tarefas: ${sector.name}...`);
+    // 3. Sync ALL Tasks in Space
+    const spaceId = CLICKUP_IDS.SPACE_OPERACAO;
+    console.log(`[Sync] Fetching all folders and lists for space ${spaceId}...`);
+    await updateSyncStatus('running', 30, `Buscando estrutura do espaço...`);
 
-      const listsRes = await fetch(`https://api.clickup.com/api/v2/folder/${sector.id}/list?archived=false`, {
+    const foldersRes = await fetch(`https://api.clickup.com/api/v2/space/${spaceId}/folder?archived=false`, {
+      headers: { "Authorization": apiToken }
+    });
+    const foldersData = await foldersRes.ok ? await foldersRes.json() : { folders: [] };
+    const folders = foldersData.folders || [];
+
+    const listsRes = await fetch(`https://api.clickup.com/api/v2/space/${spaceId}/list?archived=false`, {
+      headers: { "Authorization": apiToken }
+    });
+    const listsData = await listsRes.ok ? await listsRes.json() : { lists: [] };
+    const folderlessLists = listsData.lists || [];
+
+    let allSpaceTasks: any[] = [];
+    
+    // Fetch tasks from all folders
+    for (let i = 0; i < folders.length; i++) {
+      const folder = folders[i];
+      const progress = 30 + Math.floor((i / (folders.length + folderlessLists.length)) * 60);
+      await updateSyncStatus('running', progress, `Sincronizando pasta: ${folder.name}...`);
+
+      const folderListsRes = await fetch(`https://api.clickup.com/api/v2/folder/${folder.id}/list?archived=false`, {
         headers: { "Authorization": apiToken }
       });
-      if (!listsRes.ok) continue;
-      const listsData = await listsRes.json();
-      const lists = listsData.lists || [];
+      if (!folderListsRes.ok) continue;
+      const folderListsData = await folderListsRes.json();
+      const listsInFolder = folderListsData.lists || [];
 
-      let allFolderTasks: any[] = [];
-      for (const list of lists) {
+      for (const list of listsInFolder) {
         const listTaskUrl = `https://api.clickup.com/api/v2/list/${list.id}/task?subtasks=true&include_closed=true&date_created_gt=0`;
         const tasks = await fetchAllPages(listTaskUrl);
-        allFolderTasks = [...allFolderTasks, ...tasks];
+        allSpaceTasks = [...allSpaceTasks, ...tasks];
       }
-
-      await saveTasksInChunks(sector.id, 'folder', allFolderTasks);
     }
 
-    // 4. Sync Tasks for specific Lists
-    const listEntries = Object.entries(CLICKUP_IDS.LISTS);
-    const totalLists = listEntries.length;
-    for (let i = 0; i < totalLists; i++) {
-      const [key, listId] = listEntries[i];
-      console.log(`[Sync] Fetching tasks for list ${key} (${listId})...`);
-      
-      const progress = 70 + Math.floor((i / totalLists) * 25); // 70% to 95%
-      await updateSyncStatus('running', progress, `Sincronizando lista: ${key}...`);
+    // Fetch tasks from folderless lists
+    for (let i = 0; i < folderlessLists.length; i++) {
+      const list = folderlessLists[i];
+      const progress = 30 + Math.floor(((folders.length + i) / (folders.length + folderlessLists.length)) * 60);
+      await updateSyncStatus('running', progress, `Sincronizando lista: ${list.name}...`);
 
-      const listTaskUrl = `https://api.clickup.com/api/v2/list/${listId}/task?subtasks=true&include_closed=true&date_created_gt=0`;
+      const listTaskUrl = `https://api.clickup.com/api/v2/list/${list.id}/task?subtasks=true&include_closed=true&date_created_gt=0`;
       const tasks = await fetchAllPages(listTaskUrl);
-      
-      await saveTasksInChunks(listId, 'list', tasks);
+      allSpaceTasks = [...allSpaceTasks, ...tasks];
     }
+
+    await saveTasksInChunks(spaceId, 'space', allSpaceTasks);
 
     console.log("[Sync] Synchronization completed successfully.");
     await updateSyncStatus('idle', 100, 'Sincronização concluída com sucesso!');

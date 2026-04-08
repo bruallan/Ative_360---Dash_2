@@ -88,27 +88,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLogs([]); // Clear logs on refresh? Or keep history? Let's keep history but maybe limit it? No, user said "mesmo que fique gigantesco"
     
     try {
-      let allTasks: any[] = [];
-
-      // Fetch from SECTORS (Folders)
-      for (const sector of SECTORS) {
-        const sectorTasks = await fetchAllPages(`/api/tasks?folder_id=${sector.id}&subtasks=true&include_closed=true`);
-        // Add sector info
-        const tasksWithSector = sectorTasks.map((t: any) => ({ ...t, sector: sector.name }));
-        allTasks = [...allTasks, ...tasksWithSector];
-      }
-
-      // Fetch from specific lists (Account) if not covered by folders above
-      // Check if ACC lists are inside the folders? 
-      // ACC_REUNIOES and ACC_DEMANDAS might be separate lists.
-      // Let's fetch them explicitly just in case, or check if they are duplicates.
-      // Assuming they might be separate for now.
-      const accReunioes = await fetchAllPages(`/api/tasks?list_id=${CLICKUP_IDS.LISTS.ACC_REUNIOES}&subtasks=true&include_closed=true`);
-      const accDemandas = await fetchAllPages(`/api/tasks?list_id=${CLICKUP_IDS.LISTS.ACC_DEMANDAS}&subtasks=true&include_closed=true`);
+      // Fetch ALL tasks from the Space
+      const spaceTasks = await fetchAllPages(`/api/tasks?space_id=${CLICKUP_IDS.SPACE_OPERACAO}&subtasks=true&include_closed=true`);
       
+      // Map tasks to sectors
+      const tasksWithSector = spaceTasks.map((t: any) => {
+        let sectorName = 'Outros';
+        if (t.folder && !t.folder.hidden) {
+          const foundSector = SECTORS.find(s => s.id === t.folder.id);
+          if (foundSector) sectorName = foundSector.name;
+        } else if (t.list) {
+          if (t.list.id === CLICKUP_IDS.LISTS.ACC_REUNIOES || t.list.id === CLICKUP_IDS.LISTS.ACC_DEMANDAS) {
+            sectorName = 'Account Manager';
+          }
+        }
+        return { ...t, sector: sectorName };
+      });
+
       // Merge without duplicates
       const taskMap = new Map();
-      [...allTasks, ...accReunioes, ...accDemandas].forEach(t => taskMap.set(t.id, t));
+      tasksWithSector.forEach((t: any) => taskMap.set(t.id, t));
       const uniqueTasks = Array.from(taskMap.values());
 
       setTasks(uniqueTasks);
