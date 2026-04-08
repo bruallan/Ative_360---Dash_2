@@ -30,10 +30,12 @@ export default function ClientPanel() {
   useEffect(() => {
     fetch('/api/client-links')
       .then(async res => {
-        if (!res.ok) {
+        const contentType = res.headers.get("content-type");
+        if (!res.ok || !contentType || !contentType.includes("application/json")) {
            const text = await res.text();
-           addLog('/api/client-links', res.status, { error: text });
-           throw new Error(text);
+           console.error(`[ClientPanel] API Error: ${res.status} ${res.statusText}. Content-Type: ${contentType}. Body:`, text.substring(0, 200));
+           addLog('/api/client-links', res.status, { error: text.substring(0, 200), contentType });
+           throw new Error(`API returned non-JSON response: ${res.status}`);
         }
         return res.json();
       })
@@ -330,8 +332,8 @@ export default function ClientPanel() {
             </div>
             <div className="p-6 overflow-y-auto flex-1 space-y-3">
               {modalTasks.length > 0 ? (
-                modalTasks.map((task: any) => (
-                  <div key={task.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                modalTasks.map((task: any, index: number) => (
+                  <div key={task.id || `task-modal-${index}`} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                     <div className="flex justify-between items-start gap-2">
                       <h4 className="font-medium text-slate-900 text-sm">{task.name}</h4>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium uppercase ${

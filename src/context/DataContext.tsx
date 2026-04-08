@@ -43,6 +43,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const url = `${baseUrl}&page=${page}`;
       try {
         const res = await fetch(url);
+        const contentType = res.headers.get("content-type");
+        
+        if (!res.ok || !contentType || !contentType.includes("application/json")) {
+           const text = await res.text();
+           console.error(`[DataContext] API Error: ${res.status} ${res.statusText}. Content-Type: ${contentType}. Body:`, text.substring(0, 200));
+           addLog(url, res.status, { error: text.substring(0, 200), contentType });
+           throw new Error(`API returned non-JSON response: ${res.status}`);
+        }
+        
         const data = await res.json();
         
         addLog(url, res.status, data);
@@ -110,7 +119,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const clientField = task.custom_fields?.find((f: any) => f.name === 'Cliente');
         if (clientField && clientField.value !== undefined && clientField.value !== null) {
           if (clientField.type === 'drop_down') {
-             const option = clientField.type_config?.options?.find((o: any) => o.orderindex === clientField.value);
+             const option = clientField.type_config?.options?.find((o: any) => 
+               String(o.orderindex) === String(clientField.value) || 
+               String(o.id) === String(clientField.value)
+             );
              if (option) uniqueClients.add(String(option.name));
           } else if (clientField.value) {
              uniqueClients.add(String(clientField.value));
@@ -118,7 +130,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
-      setClients(Array.from(uniqueClients).sort((a, b) => String(a).localeCompare(String(b))));
+    const sortedClients = Array.from(uniqueClients).sort((a, b) => String(a).localeCompare(String(b)));
+    console.log(`[DataContext] Extracted ${sortedClients.length} unique clients:`, sortedClients);
+    setClients(sortedClients);
 
     } catch (err) {
       console.error(err);

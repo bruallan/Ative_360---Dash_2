@@ -25,8 +25,8 @@ const AssigneeCard = ({ tasks }: { tasks: any[] }) => {
   return (
     <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm h-full flex flex-col justify-center min-h-[80px]">
       <div className="flex flex-wrap gap-2 mb-2">
-        {assignees.map(assignee => (
-          <div key={assignee.id} className="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-full border border-slate-100">
+        {assignees.map((assignee, index) => (
+          <div key={assignee.id || `assignee-${assignee.username}-${index}`} className="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-full border border-slate-100">
             <div 
               className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
               style={{ backgroundColor: assignee.color || '#cbd5e1' }}
@@ -39,7 +39,7 @@ const AssigneeCard = ({ tasks }: { tasks: any[] }) => {
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <span>{assignee.initials}</span>
+                <span>{assignee.initials || '??'}</span>
               )}
             </div>
             <span className="text-xs font-medium text-slate-700 truncate max-w-[80px]">{assignee.username}</span>
@@ -82,16 +82,19 @@ export default function MacroOperations() {
     relevantTasks.forEach((task: any) => {
       // Find Client Name
       let clientName = 'Sem Cliente';
-      const clientField = task.custom_fields?.find((f: any) => f.name === 'Cliente');
-      
-      if (clientField && clientField.value !== undefined && clientField.value !== null) {
-        if (clientField.type === 'drop_down') {
-           const option = clientField.type_config?.options?.find((o: any) => o.orderindex === clientField.value);
-           if (option) clientName = String(option.name);
-        } else if (clientField.value) {
-           clientName = String(clientField.value);
-        }
+    const clientField = task.custom_fields?.find((f: any) => f.name === 'Cliente');
+    
+    if (clientField && clientField.value !== undefined && clientField.value !== null) {
+      if (clientField.type === 'drop_down') {
+         const option = clientField.type_config?.options?.find((o: any) => 
+           String(o.orderindex) === String(clientField.value) || 
+           String(o.id) === String(clientField.value)
+         );
+         if (option) clientName = String(option.name);
+      } else if (clientField.value) {
+         clientName = String(clientField.value);
       }
+    }
 
       if (!clientsMap.has(clientName)) {
         clientsMap.set(clientName, { name: clientName, gt: [], gc: [], design: [] });

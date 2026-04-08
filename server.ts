@@ -16,10 +16,10 @@ console.error = (...args) => {
 };
 
 // Import handlers
-import clientLinksHandler from './api/client-links.js';
-import membersHandler from './api/members.js';
-import tasksHandler from './api/tasks.js';
-import hierarchyHandler from './api/hierarchy.js';
+import clientLinksHandler from './api/client-links';
+import membersHandler from './api/members';
+import tasksHandler from './api/tasks';
+import hierarchyHandler from './api/hierarchy';
 
 // Import sync script to start cron job
 import { runSync } from './sync.js';
@@ -35,10 +35,22 @@ async function startServer() {
   app.use(express.json());
 
   // API Routes
-  app.all("/api/client-links", (req, res) => clientLinksHandler(req, res));
-  app.all("/api/members", (req, res) => membersHandler(req, res));
-  app.all("/api/tasks", (req, res) => tasksHandler(req, res));
-  app.all("/api/hierarchy", (req, res) => hierarchyHandler(req, res));
+  app.all("/api/client-links", (req, res) => {
+    console.log(`[Server] API Request: ${req.method} ${req.url}`);
+    return clientLinksHandler(req, res);
+  });
+  app.all("/api/members", (req, res) => {
+    console.log(`[Server] API Request: ${req.method} ${req.url}`);
+    return membersHandler(req, res);
+  });
+  app.all("/api/tasks", (req, res) => {
+    console.log(`[Server] API Request: ${req.method} ${req.url}`);
+    return tasksHandler(req, res);
+  });
+  app.all("/api/hierarchy", (req, res) => {
+    console.log(`[Server] API Request: ${req.method} ${req.url}`);
+    return hierarchyHandler(req, res);
+  });
 
   app.post("/api/sync", async (req, res) => {
     // Manual trigger for sync

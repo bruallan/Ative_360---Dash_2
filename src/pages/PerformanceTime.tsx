@@ -494,8 +494,8 @@ export default function PerformanceTime() {
                         if (isCompletedInPeriod) return false;
                         return ['a fazer', 'to do', 'open'].includes(t.status?.status?.toLowerCase() || '');
                       })
-                      .map((task: any) => (
-                        <TaskCard key={task.id} task={task} />
+                      .map((task: any, index: number) => (
+                        <TaskCard key={task.id || `task-todo-${index}`} task={task} />
                       ))}
                   </div>
                 </div>
@@ -523,8 +523,8 @@ export default function PerformanceTime() {
                         // we should show it as "Fazendo" (in progress) for this period's perspective.
                         return isCurrentlyCompleted || (!isCurrentlyToDo && !isCurrentlyCompleted);
                       })
-                      .map((task: any) => (
-                        <TaskCard key={task.id} task={task} />
+                      .map((task: any, index: number) => (
+                        <TaskCard key={task.id || `task-fazendo-${index}`} task={task} />
                       ))}
                   </div>
                 </div>
@@ -543,8 +543,8 @@ export default function PerformanceTime() {
                         }
                         return isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999));
                       })
-                      .map((task: any) => (
-                        <TaskCard key={task.id} task={task} />
+                      .map((task: any, index: number) => (
+                        <TaskCard key={task.id || `task-entregue-${index}`} task={task} />
                       ))}
                   </div>
                 </div>
