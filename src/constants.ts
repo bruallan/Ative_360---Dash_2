@@ -1,4 +1,5 @@
 export const CLICKUP_IDS = {
+  TEAM_ID: '9013412527',
   SPACE_OPERACAO: '901310539280',
   
   FOLDERS: {

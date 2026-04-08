@@ -12,13 +12,17 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
     const folderId = currentUrl.searchParams.get('folder_id');
     const listId = currentUrl.searchParams.get('list_id');
     const spaceId = currentUrl.searchParams.get('space_id');
+    const teamIdParam = currentUrl.searchParams.get('team_id');
     const page = currentUrl.searchParams.get('page') || '0';
     const includeSubtasks = currentUrl.searchParams.get('subtasks') || 'true';
     const archived = currentUrl.searchParams.get('archived') || 'false';
 
     let type = '';
     let id = '';
-    if (spaceId) {
+    if (teamIdParam) {
+      type = 'team';
+      id = teamIdParam;
+    } else if (spaceId) {
       type = 'space';
       id = spaceId;
     } else if (folderId) {
@@ -28,7 +32,7 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
       type = 'list';
       id = listId;
     } else {
-      throw new Error("Missing space_id, folder_id or list_id");
+      throw new Error("Missing team_id, space_id, folder_id or list_id");
     }
 
     let tasks: any[] = [];
@@ -202,11 +206,11 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
         }
         
         tasks = allTasks;
-      } else if (spaceId) {
-        // Fetch ALL tasks for the space using the Team endpoint
+      } else if (teamIdParam || spaceId) {
+        // Fetch ALL tasks for the team using the Team endpoint
         const membersRes = await fetch("https://api.clickup.com/api/v2/team", { headers: { "Authorization": apiToken } });
-        let teamId = null;
-        if (membersRes.ok) {
+        let teamId = teamIdParam;
+        if (!teamId && membersRes.ok) {
           const membersData = await membersRes.json();
           if (membersData.teams && membersData.teams.length > 0) {
             teamId = membersData.teams[0].id;
@@ -222,7 +226,10 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
         let dateCreatedGt = currentUrl.searchParams.get('date_created_gt') || '1500000000000';
         let dateCreatedLt = currentUrl.searchParams.get('date_created_lt');
         
-        let finalUrl = `${teamTaskUrl}?space_ids[]=${spaceId}&page=${page}&subtasks=${includeSubtasks}&archived=${archived}&include_closed=true&date_created_gt=${dateCreatedGt}`;
+        let finalUrl = `${teamTaskUrl}?page=${page}&subtasks=${includeSubtasks}&archived=${archived}&include_closed=true&date_created_gt=${dateCreatedGt}`;
+        if (spaceId) {
+          finalUrl += `&space_ids[]=${spaceId}`;
+        }
         if (dateCreatedLt) {
           finalUrl += `&date_created_lt=${dateCreatedLt}`;
         }
@@ -248,7 +255,7 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
       }
     }
 
-    if (!usedFallback || folderId || spaceId) {
+    if (!usedFallback || folderId || spaceId || teamIdParam) {
       // Optional: Filter by date if needed
       const dateCreatedGt = currentUrl.searchParams.get('date_created_gt');
       const dateCreatedLt = currentUrl.searchParams.get('date_created_lt');

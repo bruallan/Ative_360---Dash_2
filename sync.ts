@@ -161,8 +161,8 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any
 
   // Use batches to save chunks (max 500 operations per batch)
   // Firestore limit is 10MB per batch. Since each chunk is up to 800KB,
-  // 10 chunks = 8MB, which is safely under the 10MB limit.
-  const MAX_BATCH_SIZE = 10;
+  // we use a small batch size and a delay to prevent overwhelming the write stream.
+  const MAX_BATCH_SIZE = 2;
   for (let i = 0; i < chunks.length; i += MAX_BATCH_SIZE) {
     const batch = writeBatch(db);
     const chunkSlice = chunks.slice(i, i + MAX_BATCH_SIZE);
@@ -175,6 +175,8 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any
     
     if (chunkSlice.length > 0) {
       await batch.commit();
+      // Add a 1-second delay between batches to prevent RESOURCE_EXHAUSTED
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
 }
@@ -239,20 +241,20 @@ export async function runSync() {
       }
     }
 
-    // 3. Sync ALL Tasks in Space
-    const spaceId = CLICKUP_IDS.SPACE_OPERACAO;
-    console.log(`[Sync] Fetching ALL tasks for space ${spaceId} via Team endpoint...`);
-    await updateSyncStatus('running', 30, `Buscando todas as tarefas do espaço...`);
+    // 3. Sync ALL Tasks in Team
+    console.log(`[Sync] Fetching ALL tasks for team ${teamId} via Team endpoint...`);
+    await updateSyncStatus('running', 30, `Buscando todas as tarefas do workspace...`);
 
     if (!teamId) {
-      throw new Error("Team ID not found, cannot fetch space tasks.");
+      throw new Error("Team ID not found, cannot fetch tasks.");
     }
 
     // Using 1500000000000 (July 2017) to ensure we get all historical tasks
-    const teamTaskUrl = `https://api.clickup.com/api/v2/team/${teamId}/task?space_ids[]=${spaceId}&subtasks=true&include_closed=true&date_created_gt=1500000000000`;
-    const allSpaceTasks = await fetchAllPages(teamTaskUrl);
+    // We remove space_ids[] to fetch from ALL spaces in the workspace
+    const teamTaskUrl = `https://api.clickup.com/api/v2/team/${teamId}/task?subtasks=true&include_closed=true&date_created_gt=1500000000000`;
+    const allTeamTasks = await fetchAllPages(teamTaskUrl);
 
-    await saveTasksInChunks(spaceId, 'space', allSpaceTasks);
+    await saveTasksInChunks(teamId, 'team', allTeamTasks);
 
     console.log("[Sync] Synchronization completed successfully.");
     await updateSyncStatus('idle', 100, 'Sincronização concluída com sucesso!');

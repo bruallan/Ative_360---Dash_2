@@ -88,8 +88,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLogs([]); // Clear logs on refresh? Or keep history? Let's keep history but maybe limit it? No, user said "mesmo que fique gigantesco"
     
     try {
-      // Fetch ALL tasks from the Space
-      const spaceTasks = await fetchAllPages(`/api/tasks?space_id=${CLICKUP_IDS.SPACE_OPERACAO}&subtasks=true&include_closed=true`);
+      // Fetch ALL tasks from the Team (Workspace)
+      const spaceTasks = await fetchAllPages(`/api/tasks?team_id=${CLICKUP_IDS.TEAM_ID}&subtasks=true&include_closed=true`);
       
       // Map tasks to sectors
       const tasksWithSector = spaceTasks.map((t: any) => {
