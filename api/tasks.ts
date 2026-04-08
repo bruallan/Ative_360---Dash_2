@@ -218,24 +218,15 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
         }
 
         const teamTaskUrl = `https://api.clickup.com/api/v2/team/${teamId}/task`;
-        const params = new URLSearchParams({
-          page,
-          subtasks: includeSubtasks,
-          archived,
-          include_closed: 'true',
-        });
-        params.append('space_ids[]', spaceId);
         
-        if (currentUrl.searchParams.has('date_created_gt')) {
-          params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
-        } else {
-          params.append('date_created_gt', '1500000000000');
-        }
-        if (currentUrl.searchParams.has('date_created_lt')) {
-          params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
+        let dateCreatedGt = currentUrl.searchParams.get('date_created_gt') || '1500000000000';
+        let dateCreatedLt = currentUrl.searchParams.get('date_created_lt');
+        
+        let finalUrl = `${teamTaskUrl}?space_ids[]=${spaceId}&page=${page}&subtasks=${includeSubtasks}&archived=${archived}&include_closed=true&date_created_gt=${dateCreatedGt}`;
+        if (dateCreatedLt) {
+          finalUrl += `&date_created_lt=${dateCreatedLt}`;
         }
 
-        const finalUrl = `${teamTaskUrl}?${params.toString()}`;
         console.log(`[API] Fetching tasks from ClickUp Team endpoint: ${finalUrl}`);
         
         const response = await fetch(finalUrl, {

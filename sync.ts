@@ -160,7 +160,9 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any
   console.log(`[Sync] Split into ${chunks.length} chunks.`);
 
   // Use batches to save chunks (max 500 operations per batch)
-  const MAX_BATCH_SIZE = 400;
+  // Firestore limit is 10MB per batch. Since each chunk is up to 800KB,
+  // 10 chunks = 8MB, which is safely under the 10MB limit.
+  const MAX_BATCH_SIZE = 10;
   for (let i = 0; i < chunks.length; i += MAX_BATCH_SIZE) {
     const batch = writeBatch(db);
     const chunkSlice = chunks.slice(i, i + MAX_BATCH_SIZE);
