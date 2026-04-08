@@ -91,6 +91,11 @@ function cleanTask(task: any) {
       id: task.list.id,
       name: task.list.name
     } : undefined,
+    folder: task.folder ? {
+      id: task.folder.id,
+      name: task.folder.name,
+      hidden: task.folder.hidden
+    } : undefined,
     custom_fields: task.custom_fields?.filter((f: any) => f.name === 'Cliente').map((f: any) => ({
       name: f.name,
       value: f.value,
@@ -234,53 +239,16 @@ export async function runSync() {
 
     // 3. Sync ALL Tasks in Space
     const spaceId = CLICKUP_IDS.SPACE_OPERACAO;
-    console.log(`[Sync] Fetching all folders and lists for space ${spaceId}...`);
-    await updateSyncStatus('running', 30, `Buscando estrutura do espaço...`);
+    console.log(`[Sync] Fetching ALL tasks for space ${spaceId} via Team endpoint...`);
+    await updateSyncStatus('running', 30, `Buscando todas as tarefas do espaço...`);
 
-    const foldersRes = await fetch(`https://api.clickup.com/api/v2/space/${spaceId}/folder?archived=false`, {
-      headers: { "Authorization": apiToken }
-    });
-    const foldersData = await foldersRes.ok ? await foldersRes.json() : { folders: [] };
-    const folders = foldersData.folders || [];
-
-    const listsRes = await fetch(`https://api.clickup.com/api/v2/space/${spaceId}/list?archived=false`, {
-      headers: { "Authorization": apiToken }
-    });
-    const listsData = await listsRes.ok ? await listsRes.json() : { lists: [] };
-    const folderlessLists = listsData.lists || [];
-
-    let allSpaceTasks: any[] = [];
-    
-    // Fetch tasks from all folders
-    for (let i = 0; i < folders.length; i++) {
-      const folder = folders[i];
-      const progress = 30 + Math.floor((i / (folders.length + folderlessLists.length)) * 60);
-      await updateSyncStatus('running', progress, `Sincronizando pasta: ${folder.name}...`);
-
-      const folderListsRes = await fetch(`https://api.clickup.com/api/v2/folder/${folder.id}/list?archived=false`, {
-        headers: { "Authorization": apiToken }
-      });
-      if (!folderListsRes.ok) continue;
-      const folderListsData = await folderListsRes.json();
-      const listsInFolder = folderListsData.lists || [];
-
-      for (const list of listsInFolder) {
-        const listTaskUrl = `https://api.clickup.com/api/v2/list/${list.id}/task?subtasks=true&include_closed=true&date_created_gt=0`;
-        const tasks = await fetchAllPages(listTaskUrl);
-        allSpaceTasks = [...allSpaceTasks, ...tasks];
-      }
+    if (!teamId) {
+      throw new Error("Team ID not found, cannot fetch space tasks.");
     }
 
-    // Fetch tasks from folderless lists
-    for (let i = 0; i < folderlessLists.length; i++) {
-      const list = folderlessLists[i];
-      const progress = 30 + Math.floor(((folders.length + i) / (folders.length + folderlessLists.length)) * 60);
-      await updateSyncStatus('running', progress, `Sincronizando lista: ${list.name}...`);
-
-      const listTaskUrl = `https://api.clickup.com/api/v2/list/${list.id}/task?subtasks=true&include_closed=true&date_created_gt=0`;
-      const tasks = await fetchAllPages(listTaskUrl);
-      allSpaceTasks = [...allSpaceTasks, ...tasks];
-    }
+    // Using 1500000000000 (July 2017) to ensure we get all historical tasks
+    const teamTaskUrl = `https://api.clickup.com/api/v2/team/${teamId}/task?space_ids[]=${spaceId}&subtasks=true&include_closed=true&date_created_gt=1500000000000`;
+    const allSpaceTasks = await fetchAllPages(teamTaskUrl);
 
     await saveTasksInChunks(spaceId, 'space', allSpaceTasks);
 

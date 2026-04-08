@@ -203,77 +203,57 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
         
         tasks = allTasks;
       } else if (spaceId) {
-        // Fetch Folders
-        const foldersUrl = `https://api.clickup.com/api/v2/space/${spaceId}/folder?archived=false`;
-        const foldersResponse = await fetch(foldersUrl, { headers: { "Authorization": apiToken } });
-        const foldersData = await foldersResponse.ok ? await foldersResponse.json() : { folders: [] };
-        const folders = foldersData.folders || [];
-
-        // Fetch folderless lists
-        const listsUrl = `https://api.clickup.com/api/v2/space/${spaceId}/list?archived=false`;
-        const listsResponse = await fetch(listsUrl, { headers: { "Authorization": apiToken } });
-        const listsData = await listsResponse.ok ? await listsResponse.json() : { lists: [] };
-        const folderlessLists = listsData.lists || [];
-
-        let allLists = [...folderlessLists];
-        for (const folder of folders) {
-          const folderListsRes = await fetch(`https://api.clickup.com/api/v2/folder/${folder.id}/list?archived=false`, {
-            headers: { "Authorization": apiToken }
-          });
-          if (folderListsRes.ok) {
-            const folderListsData = await folderListsRes.json();
-            allLists = [...allLists, ...(folderListsData.lists || [])];
+        // Fetch ALL tasks for the space using the Team endpoint
+        const membersRes = await fetch("https://api.clickup.com/api/v2/team", { headers: { "Authorization": apiToken } });
+        let teamId = null;
+        if (membersRes.ok) {
+          const membersData = await membersRes.json();
+          if (membersData.teams && membersData.teams.length > 0) {
+            teamId = membersData.teams[0].id;
           }
         }
 
-        const allTasks = [];
-        const batchSize = 3;
-        
-        for (let i = 0; i < allLists.length; i += batchSize) {
-          const batch = allLists.slice(i, i + batchSize);
-          
-          const batchPromises = batch.map(async (list: any) => {
-            const listTaskUrl = `https://api.clickup.com/api/v2/list/${list.id}/task`;
-            const params = new URLSearchParams({
-              page,
-              subtasks: includeSubtasks,
-              archived,
-              include_closed: 'true',
-            });
-            
-            if (currentUrl.searchParams.has('date_created_gt')) {
-              params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
-            } else {
-              params.append('date_created_gt', '0');
-            }
-            if (currentUrl.searchParams.has('date_created_lt')) {
-              params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
-            }
-
-            const finalUrl = `${listTaskUrl}?${params.toString()}`;
-            
-            try {
-              const response = await fetch(finalUrl, {
-                headers: { 
-                  "Authorization": apiToken,
-                  "User-Agent": "Node.js/Fetch",
-                  "Connection": "keep-alive"
-                }
-              });
-
-              if (!response.ok) return [];
-              const data = await response.json();
-              return data.tasks || [];
-            } catch (err) {
-              return [];
-            }
-          });
-
-          const results = await Promise.all(batchPromises);
-          allTasks.push(...results.flat());
+        if (!teamId) {
+          throw new Error("Team ID not found");
         }
+
+        const teamTaskUrl = `https://api.clickup.com/api/v2/team/${teamId}/task`;
+        const params = new URLSearchParams({
+          page,
+          subtasks: includeSubtasks,
+          archived,
+          include_closed: 'true',
+        });
+        params.append('space_ids[]', spaceId);
         
-        tasks = allTasks;
+        if (currentUrl.searchParams.has('date_created_gt')) {
+          params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
+        } else {
+          params.append('date_created_gt', '1500000000000');
+        }
+        if (currentUrl.searchParams.has('date_created_lt')) {
+          params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
+        }
+
+        const finalUrl = `${teamTaskUrl}?${params.toString()}`;
+        console.log(`[API] Fetching tasks from ClickUp Team endpoint: ${finalUrl}`);
+        
+        const response = await fetch(finalUrl, {
+          headers: { 
+            "Authorization": apiToken,
+            "User-Agent": "Node.js/Fetch",
+            "Connection": "keep-alive"
+          }
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`ClickUp API Error ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+        res.end(JSON.stringify(data));
+        return;
       }
     }
 
