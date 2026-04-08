@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Calendar, ArrowLeft, X, Loader2, RefreshCw, Filter } from 'lucide-react';
 import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { 
   isTaskActiveInPeriod, 
   isTaskCompletedInPeriod, 
@@ -11,13 +12,15 @@ import {
 } from '../utils/taskFilters';
 
 const COLORS = {
-  completed: '#475569', // Slate 600
-  pending: '#94a3b8',   // Slate 400
-  overdue: '#e2e8f0',   // Slate 200
+  todo: '#9ca3af',      // Cinza
+  active: '#3b82f6',    // Azul
+  completed: '#22c55e', // Verde
+  overdue: '#ef4444',   // Vermelho
 };
 
 export default function PerformanceTime() {
   const { tasks: allTasks, loading } = useData();
+  const { user } = useAuth();
   const [dateRange, setDateRange] = useState({
     start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
@@ -53,6 +56,7 @@ export default function PerformanceTime() {
     completedEnd: ''
   });
   const [appliedModalAdvancedDateRange, setAppliedModalAdvancedDateRange] = useState(modalAdvancedDateRange);
+  const [modalSearchQuery, setModalSearchQuery] = useState('');
 
   useEffect(() => {
     if (allTasks.length > 0) {
@@ -80,56 +84,62 @@ export default function PerformanceTime() {
           return t.assignees?.some((a: any) => String(a.id) === String(member.id));
         });
 
-        let completed = 0;
+        let todo = 0;
         let active = 0;
+        let completed = 0;
         let overdue = 0;
-        let pending = 0;
+
+        let filteredTasks = memberTasks;
 
         if (isAdvancedFilter) {
           const { createdStart, createdEnd, completedStart, completedEnd } = appliedAdvancedDateRange;
-          
-          let filteredTasks = memberTasks;
-
           if (createdStart && createdEnd) {
             const cStart = new Date(createdStart).getTime();
             const cEnd = new Date(createdEnd);
             cEnd.setHours(23, 59, 59, 999);
             filteredTasks = filteredTasks.filter((t: any) => isTaskCreatedInPeriod(t, cStart, cEnd.getTime()));
           }
-
           if (completedStart && completedEnd) {
             const compStart = new Date(completedStart).getTime();
             const compEnd = new Date(completedEnd);
             compEnd.setHours(23, 59, 59, 999);
             filteredTasks = filteredTasks.filter((t: any) => isTaskCompletedInPeriod(t, compStart, compEnd.getTime()));
           }
-
-          const completedTasksList = filteredTasks.filter((t: any) => ['entregue', 'complete', 'closed'].includes(t.status?.status?.toLowerCase() || ''));
-          const activeTasksList = filteredTasks.filter((t: any) => !['entregue', 'complete', 'closed'].includes(t.status?.status?.toLowerCase() || ''));
-          const overdueTasksList = activeTasksList.filter((t: any) => {
-            const due = t.due_date ? parseInt(t.due_date) : null;
-            return due && due < Date.now();
-          });
-
-          completed = completedTasksList.length;
-          overdue = overdueTasksList.length;
-          pending = activeTasksList.length - overdue;
-          active = completed + pending + overdue;
-
         } else {
-          const activeTasksList = memberTasks.filter((t: any) => isTaskActiveInPeriod(t, startDate, endDateMs));
-          const completedTasksList = memberTasks.filter((t: any) => isTaskCompletedInPeriod(t, startDate, endDateMs));
-          const overdueTasksList = activeTasksList.filter((t: any) => isTaskOverdueAtEndOfPeriod(t, endDateMs));
-
-          completed = completedTasksList.length;
-          active = activeTasksList.length;
-          overdue = overdueTasksList.length;
-          pending = active - completed - overdue; // Not delivered and not overdue in this period
+          filteredTasks = memberTasks.filter((t: any) => isTaskActiveInPeriod(t, startDate, endDateMs) || isTaskCompletedInPeriod(t, startDate, endDateMs));
         }
+
+        filteredTasks.forEach((t: any) => {
+          const status = t.status?.status?.toLowerCase() || '';
+          const isCompletedStatus = ['entregue', 'complete', 'closed'].includes(status);
+          const isTodoStatus = ['a fazer', 'to do', 'open'].includes(status);
+          
+          let isCompleted = isCompletedStatus;
+          if (!isAdvancedFilter && isCompletedStatus) {
+            isCompleted = isTaskCompletedInPeriod(t, startDate, endDateMs);
+          }
+
+          if (isCompleted) {
+            completed++;
+            return;
+          }
+
+          const due = t.due_date ? parseInt(t.due_date) : null;
+          const referenceDate = isAdvancedFilter ? Date.now() : endDateMs;
+          const isOverdue = due ? due < referenceDate : false;
+
+          if (isOverdue) {
+            overdue++;
+          } else if (isTodoStatus) {
+            todo++;
+          } else {
+            active++;
+          }
+        });
 
         return {
           ...member,
-          stats: { completed, active, pending, overdue },
+          stats: { todo, active, completed, overdue },
           tasks: memberTasks
         };
       });
@@ -141,33 +151,38 @@ export default function PerformanceTime() {
   };
 
   const getFilteredMemberTasks = (tasks: any[]) => {
+    let filtered = tasks;
+
+    if (modalSearchQuery.trim()) {
+      const query = modalSearchQuery.toLowerCase();
+      filtered = filtered.filter(t => t.name?.toLowerCase().includes(query));
+    }
+
     if (isModalAdvancedFilter) {
       const { createdStart, createdEnd, completedStart, completedEnd } = appliedModalAdvancedDateRange;
       
-      let filteredTasks = tasks;
-
       if (createdStart && createdEnd) {
         const cStart = new Date(createdStart).getTime();
         const cEnd = new Date(createdEnd);
         cEnd.setHours(23, 59, 59, 999);
-        filteredTasks = filteredTasks.filter((t: any) => isTaskCreatedInPeriod(t, cStart, cEnd.getTime()));
+        filtered = filtered.filter((t: any) => isTaskCreatedInPeriod(t, cStart, cEnd.getTime()));
       }
 
       if (completedStart && completedEnd) {
         const compStart = new Date(completedStart).getTime();
         const compEnd = new Date(completedEnd);
         compEnd.setHours(23, 59, 59, 999);
-        filteredTasks = filteredTasks.filter((t: any) => isTaskCompletedInPeriod(t, compStart, compEnd.getTime()));
+        filtered = filtered.filter((t: any) => isTaskCompletedInPeriod(t, compStart, compEnd.getTime()));
       }
 
-      return filteredTasks;
+      return filtered;
     } else {
       const startDate = new Date(appliedModalDateRange.start).getTime();
       const endDate = new Date(appliedModalDateRange.end);
       endDate.setHours(23, 59, 59, 999);
       const endDateMs = endDate.getTime();
 
-      return tasks.filter((t: any) => {
+      return filtered.filter((t: any) => {
         // For the modal, we want to show tasks that were active OR completed in the period
         return isTaskActiveInPeriod(t, startDate, endDateMs) || isTaskCompletedInPeriod(t, startDate, endDateMs);
       });
@@ -328,46 +343,55 @@ export default function PerformanceTime() {
                   <PieChart>
                     <Pie
                       data={[
-                        { name: 'Entregue', value: member.stats.completed },
-                        { name: 'Pendente', value: member.stats.pending },
-                        { name: 'Atrasado', value: member.stats.overdue }
+                        { name: 'A Fazer', value: member.stats.todo },
+                        { name: 'Ativas', value: member.stats.active },
+                        { name: 'Concluídas', value: member.stats.completed },
+                        { name: 'Atrasadas', value: member.stats.overdue }
                       ]}
                       innerRadius={30}
                       outerRadius={40}
                       paddingAngle={2}
                       dataKey="value"
                     >
+                      <Cell fill={COLORS.todo} />
+                      <Cell fill={COLORS.active} />
                       <Cell fill={COLORS.completed} />
-                      <Cell fill={COLORS.pending} />
                       <Cell fill={COLORS.overdue} />
                     </Pie>
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex items-center justify-center flex-col">
                   <span className="text-xs text-slate-400">Total</span>
-                  <span className="font-bold text-slate-700">{member.stats.completed + member.stats.pending + member.stats.overdue}</span>
+                  <span className="font-bold text-slate-700">{member.stats.todo + member.stats.active + member.stats.completed + member.stats.overdue}</span>
                 </div>
               </div>
 
               <div className="flex-1 space-y-2 text-sm">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.todo }} />
+                    <span className="text-slate-600">A Fazer</span>
+                  </div>
+                  <span className="font-bold text-slate-900">{member.stats.todo}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.active }} />
+                    <span className="text-slate-600">Ativas</span>
+                  </div>
+                  <span className="font-bold text-slate-900">{member.stats.active}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.completed }} />
-                    <span className="text-slate-600">Entregue</span>
+                    <span className="text-slate-600">Concluídas</span>
                   </div>
                   <span className="font-bold text-slate-900">{member.stats.completed}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.pending }} />
-                    <span className="text-slate-600">Pendente</span>
-                  </div>
-                  <span className="font-bold text-slate-900">{member.stats.pending}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.overdue }} />
-                    <span className="text-slate-600">Atrasado</span>
+                    <span className="text-slate-600">Atrasadas</span>
                   </div>
                   <span className="font-bold text-red-500">{member.stats.overdue}</span>
                 </div>
@@ -397,6 +421,19 @@ export default function PerformanceTime() {
               </div>
               
               <div className="flex items-center gap-4 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+                {/* Search Bar */}
+                {(user?.username === 'bruno' || user?.username === 'admin') && (
+                  <div className="flex items-center gap-2 bg-white p-1.5 rounded-lg border shadow-sm min-w-[200px]">
+                    <input
+                      type="text"
+                      placeholder="Buscar tarefa..."
+                      value={modalSearchQuery}
+                      onChange={(e) => setModalSearchQuery(e.target.value)}
+                      className="text-sm border-none focus:ring-0 p-1 w-full text-slate-600 bg-transparent"
+                    />
+                  </div>
+                )}
+
                 {/* Date Filter inside Modal */}
                 <div className="flex items-center gap-2 bg-white p-1.5 rounded-lg border shadow-sm min-w-max">
                   <button 
@@ -477,22 +514,35 @@ export default function PerformanceTime() {
             </div>
             
             <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                
                 {/* Column: A Fazer */}
                 <div className="space-y-4">
                   <h4 className="font-semibold text-slate-700 flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-slate-400" />
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.todo }} />
                     A Fazer
                   </h4>
                   <div className="space-y-3">
                     {getFilteredMemberTasks(selectedMember.tasks)
                       .filter((t: any) => {
-                        if (isModalAdvancedFilter) {
-                          return ['a fazer', 'to do', 'open'].includes(t.status?.status?.toLowerCase() || '');
+                        const status = t.status?.status?.toLowerCase() || '';
+                        const isCompletedStatus = ['entregue', 'complete', 'closed'].includes(status);
+                        const isTodoStatus = ['a fazer', 'to do', 'open'].includes(status);
+                        
+                        let isCompleted = isCompletedStatus;
+                        if (!isModalAdvancedFilter && isCompletedStatus) {
+                          const endDateMs = new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999);
+                          const startDateMs = new Date(appliedModalDateRange.start).getTime();
+                          isCompleted = isTaskCompletedInPeriod(t, startDateMs, endDateMs);
                         }
-                        const isCompletedInPeriod = isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999));
-                        if (isCompletedInPeriod) return false;
-                        return ['a fazer', 'to do', 'open'].includes(t.status?.status?.toLowerCase() || '');
+
+                        if (isCompleted) return false;
+
+                        const due = t.due_date ? parseInt(t.due_date) : null;
+                        const referenceDate = isModalAdvancedFilter ? Date.now() : new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999);
+                        const isOverdue = due ? due < referenceDate : false;
+
+                        return !isOverdue && isTodoStatus;
                       })
                       .map((task: any, index: number) => (
                         <TaskCard key={task.id || `task-todo-${index}`} task={task} />
@@ -500,54 +550,100 @@ export default function PerformanceTime() {
                   </div>
                 </div>
 
-                {/* Column: Fazendo */}
+                {/* Column: Ativas */}
                 <div className="space-y-4">
                   <h4 className="font-semibold text-slate-700 flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-amber-400" />
-                    Fazendo
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.active }} />
+                    Ativas
                   </h4>
                   <div className="space-y-3">
                     {getFilteredMemberTasks(selectedMember.tasks)
                       .filter((t: any) => {
-                        const isCurrentlyCompleted = ['entregue', 'complete', 'closed'].includes(t.status?.status?.toLowerCase() || '');
-                        const isCurrentlyToDo = ['a fazer', 'to do', 'open'].includes(t.status?.status?.toLowerCase() || '');
+                        const status = t.status?.status?.toLowerCase() || '';
+                        const isCompletedStatus = ['entregue', 'complete', 'closed'].includes(status);
+                        const isTodoStatus = ['a fazer', 'to do', 'open'].includes(status);
                         
-                        if (isModalAdvancedFilter) {
-                          return !isCurrentlyToDo && !isCurrentlyCompleted;
+                        let isCompleted = isCompletedStatus;
+                        if (!isModalAdvancedFilter && isCompletedStatus) {
+                          const endDateMs = new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999);
+                          const startDateMs = new Date(appliedModalDateRange.start).getTime();
+                          isCompleted = isTaskCompletedInPeriod(t, startDateMs, endDateMs);
                         }
 
-                        const isCompletedInPeriod = isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999));
-                        if (isCompletedInPeriod) return false;
-                        
-                        // If it's not completed in the period, but its current status is completed (meaning it was completed AFTER the period),
-                        // we should show it as "Fazendo" (in progress) for this period's perspective.
-                        return isCurrentlyCompleted || (!isCurrentlyToDo && !isCurrentlyCompleted);
+                        if (isCompleted) return false;
+
+                        const due = t.due_date ? parseInt(t.due_date) : null;
+                        const referenceDate = isModalAdvancedFilter ? Date.now() : new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999);
+                        const isOverdue = due ? due < referenceDate : false;
+
+                        return !isOverdue && !isTodoStatus;
                       })
                       .map((task: any, index: number) => (
-                        <TaskCard key={task.id || `task-fazendo-${index}`} task={task} />
+                        <TaskCard key={task.id || `task-ativa-${index}`} task={task} />
                       ))}
                   </div>
                 </div>
 
-                {/* Column: Entregue */}
+                {/* Column: Concluídas */}
                 <div className="space-y-4">
                   <h4 className="font-semibold text-slate-700 flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                    Entregue
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.completed }} />
+                    Concluídas
                   </h4>
                   <div className="space-y-3">
                     {getFilteredMemberTasks(selectedMember.tasks)
                       .filter((t: any) => {
-                        if (isModalAdvancedFilter) {
-                           return ['entregue', 'complete', 'closed'].includes(t.status?.status?.toLowerCase() || '');
+                        const status = t.status?.status?.toLowerCase() || '';
+                        const isCompletedStatus = ['entregue', 'complete', 'closed'].includes(status);
+                        
+                        let isCompleted = isCompletedStatus;
+                        if (!isModalAdvancedFilter && isCompletedStatus) {
+                          const endDateMs = new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999);
+                          const startDateMs = new Date(appliedModalDateRange.start).getTime();
+                          isCompleted = isTaskCompletedInPeriod(t, startDateMs, endDateMs);
                         }
-                        return isTaskCompletedInPeriod(t, new Date(appliedModalDateRange.start).getTime(), new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999));
+
+                        return isCompleted;
                       })
                       .map((task: any, index: number) => (
-                        <TaskCard key={task.id || `task-entregue-${index}`} task={task} />
+                        <TaskCard key={task.id || `task-concluida-${index}`} task={task} />
                       ))}
                   </div>
                 </div>
+
+                {/* Column: Atrasadas */}
+                <div className="space-y-4">
+                  <h4 className="font-semibold text-slate-700 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.overdue }} />
+                    Atrasadas
+                  </h4>
+                  <div className="space-y-3">
+                    {getFilteredMemberTasks(selectedMember.tasks)
+                      .filter((t: any) => {
+                        const status = t.status?.status?.toLowerCase() || '';
+                        const isCompletedStatus = ['entregue', 'complete', 'closed'].includes(status);
+                        
+                        let isCompleted = isCompletedStatus;
+                        if (!isModalAdvancedFilter && isCompletedStatus) {
+                          const endDateMs = new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999);
+                          const startDateMs = new Date(appliedModalDateRange.start).getTime();
+                          isCompleted = isTaskCompletedInPeriod(t, startDateMs, endDateMs);
+                        }
+
+                        if (isCompleted) return false;
+
+                        const due = t.due_date ? parseInt(t.due_date) : null;
+                        const referenceDate = isModalAdvancedFilter ? Date.now() : new Date(appliedModalDateRange.end).setHours(23, 59, 59, 999);
+                        const isOverdue = due ? due < referenceDate : false;
+
+                        return isOverdue;
+                      })
+                      .map((task: any, index: number) => (
+                        <TaskCard key={task.id || `task-atrasada-${index}`} task={task} />
+                      ))}
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>
@@ -580,6 +676,25 @@ const TaskCard = ({ task }: { task: any; key?: string | number }) => (
       }`}>
         {task.status?.status || 'Sem Status'}
       </span>
+      
+      {/* Assignees */}
+      {task.assignees && task.assignees.length > 0 && (
+        <div className="flex -space-x-2 overflow-hidden">
+          {task.assignees.map((assignee: any) => (
+            <div 
+              key={assignee.id} 
+              className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 overflow-hidden"
+              title={assignee.username}
+            >
+              {assignee.profilePicture ? (
+                <img src={assignee.profilePicture} alt={assignee.username} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                assignee.initials
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
     <div className="flex flex-col gap-1 pt-2 border-t border-slate-100">
       <div className="flex justify-between items-center text-[10px] text-slate-500">

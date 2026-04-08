@@ -250,7 +250,7 @@ export async function runSync() {
 
       let allFolderTasks: any[] = [];
       for (const list of lists) {
-        const listTaskUrl = `https://api.clickup.com/api/v2/list/${list.id}/task?subtasks=true&include_closed=true`;
+        const listTaskUrl = `https://api.clickup.com/api/v2/list/${list.id}/task?subtasks=true&include_closed=true&date_created_gt=0`;
         const tasks = await fetchAllPages(listTaskUrl);
         allFolderTasks = [...allFolderTasks, ...tasks];
       }
@@ -268,7 +268,7 @@ export async function runSync() {
       const progress = 70 + Math.floor((i / totalLists) * 25); // 70% to 95%
       await updateSyncStatus('running', progress, `Sincronizando lista: ${key}...`);
 
-      const listTaskUrl = `https://api.clickup.com/api/v2/list/${listId}/task?subtasks=true&include_closed=true`;
+      const listTaskUrl = `https://api.clickup.com/api/v2/list/${listId}/task?subtasks=true&include_closed=true&date_created_gt=0`;
       const tasks = await fetchAllPages(listTaskUrl);
       
       await saveTasksInChunks(listId, 'list', tasks);

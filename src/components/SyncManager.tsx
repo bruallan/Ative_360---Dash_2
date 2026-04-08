@@ -21,7 +21,6 @@ export default function SyncManager() {
       }
     }, (error) => {
       console.warn("[SyncManager] Firestore snapshot error (likely quota):", error);
-      // Silently fail or show a subtle indicator if needed
     });
     return () => unsub();
   }, []);

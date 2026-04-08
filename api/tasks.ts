@@ -108,6 +108,8 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
         });
         if (currentUrl.searchParams.has('date_created_gt')) {
           params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
+        } else {
+          params.append('date_created_gt', '0');
         }
         if (currentUrl.searchParams.has('date_created_lt')) {
           params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
@@ -165,6 +167,8 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
             
             if (currentUrl.searchParams.has('date_created_gt')) {
               params.append('date_created_gt', currentUrl.searchParams.get('date_created_gt')!);
+            } else {
+              params.append('date_created_gt', '0');
             }
             if (currentUrl.searchParams.has('date_created_lt')) {
               params.append('date_created_lt', currentUrl.searchParams.get('date_created_lt')!);
