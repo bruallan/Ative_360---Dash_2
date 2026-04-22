@@ -70,6 +70,7 @@ import Sidebar from './components/Sidebar';
 import Overview from './pages/Overview';
 import ClientPanel from './pages/ClientPanel';
 import PerformanceTime from './pages/PerformanceTime';
+import PerformanceClientes from './pages/PerformanceClientes';
 import Account from './pages/Account';
 import MacroOperations from './pages/MacroOperations';
 import Login from './pages/Login';
@@ -110,6 +111,7 @@ export default function App() {
             <Route path="/" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
             <Route path="/clients" element={<ProtectedRoute><ClientPanel /></ProtectedRoute>} />
             <Route path="/performance" element={<ProtectedRoute><PerformanceTime /></ProtectedRoute>} />
+            <Route path="/performance-clientes" element={<ProtectedRoute><PerformanceClientes /></ProtectedRoute>} />
             <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
             <Route path="/macro" element={<ProtectedRoute><MacroOperations /></ProtectedRoute>} />
             

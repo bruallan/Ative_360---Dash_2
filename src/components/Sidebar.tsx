@@ -16,6 +16,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     { icon: LayoutDashboard, label: 'Visão Geral', path: '/' },
     { icon: Users, label: 'Painel de Clientes', path: '/clients' },
     { icon: BarChart3, label: 'Performance Time', path: '/performance' },
+    { icon: BarChart3, label: 'Performance Clientes', path: '/performance-clientes' },
     { icon: UserCircle, label: 'Account', path: '/account' },
     { icon: Layers, label: 'Operações Macro', path: '/macro' },
   ];

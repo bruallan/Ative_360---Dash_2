@@ -18,8 +18,8 @@ const COLORS = {
   overdue: '#ef4444',   // Vermelho
 };
 
-export default function PerformanceTime() {
-  const { tasks: allTasks, loading } = useData();
+export default function PerformanceClientes() {
+  const { tasks: allTasks, loading, clients } = useData();
   const { user } = useAuth();
   const [dateRange, setDateRange] = useState({
     start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
@@ -66,12 +66,8 @@ export default function PerformanceTime() {
 
   const processData = async () => {
     try {
-      // 1. Fetch Members
-      const membersRes = await fetch('/api/members');
-      const membersData = await membersRes.json();
-      const members = membersData.teams?.[0]?.members?.map((m: any) => m.user) || [];
-      
-      if (members.length === 0) return;
+      // 1. Check Clients
+      if (clients.length === 0) return;
 
       // Parse 'YYYY-MM-DD' as local time to avoid UTC offset issues
       const [startYear, startMonth, startDay] = appliedDateRange.start.split('-').map(Number);
@@ -81,10 +77,23 @@ export default function PerformanceTime() {
       const endDate = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
       const endDateMs = endDate.getTime();
 
-      // 3. Process Data per Member
-      const processedMembers = members.map((member: any) => {
-        const memberTasks = allTasks.filter((t: any) => {
-          return t.assignees?.some((a: any) => String(a.id) === String(member.id));
+      // 3. Process Data per Client
+      const processedMembers = clients.map((client: string) => {
+        const memberTasks = allTasks.filter((task: any) => {
+          const clientField = task.custom_fields?.find((f: any) => f.name === 'Cliente');
+          if (!clientField || (clientField.value === undefined || clientField.value === null)) return false;
+          
+          let clientName = '';
+          if (clientField.type === 'drop_down') {
+             const option = clientField.type_config?.options?.find((o: any) => 
+               String(o.orderindex) === String(clientField.value) || 
+               String(o.id) === String(clientField.value)
+             );
+             if (option) clientName = String(option.name);
+          } else if (clientField.value) {
+             clientName = String(clientField.value);
+          }
+          return clientName === client;
         });
 
         let todo = 0;
@@ -145,7 +154,11 @@ export default function PerformanceTime() {
         });
 
         return {
-          ...member,
+          id: client,
+          username: client,
+          initials: client ? client.substring(0, 2).toUpperCase() : 'NA',
+          profilePicture: null,
+          color: '#e2e8f0', // default gray color
           stats: { todo, active, completed, overdue },
           tasks: memberTasks
         };
@@ -228,7 +241,7 @@ export default function PerformanceTime() {
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-2xl font-bold text-slate-900">Performance Time</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Performance Clientes</h1>
         
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
