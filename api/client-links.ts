@@ -20,8 +20,8 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
   res.setHeader('Content-Type', 'application/json');
 
   const apiToken = process.env.CLICKUP_API_TOKEN;
-  // Use env var or hardcoded fallback directly to avoid importing from src in serverless function
-  const configListId = process.env.CLICKUP_CONFIG_LIST_ID || '901326190559';
+  // Hardcode the list ID to ensure it works, ignoring any potentially invalid env var
+  const configListId = '901326190559';
 
   if (!apiToken) {
     res.statusCode = 500;
@@ -44,7 +44,7 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
 
   try {
     if (req.method === 'GET') {
-      const response = await fetch(`https://api.clickup.com/api/v2/list/${configListId}/task?archived=false`, {
+      const response = await fetch(`https://api.clickup.com/api/v2/list/${configListId}/task?archived=false&include_closed=true`, {
         headers: { 'Authorization': apiToken }
       });
 
@@ -59,8 +59,12 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
 
       const links: Record<string, string> = {};
       tasks.forEach((task: any) => {
-        if (task.description) {
-          links[task.name] = task.description;
+        const embedField = task.custom_fields?.find((f: any) => f.id === '833454be-cd31-4eb6-9b9d-64496b2740d0');
+        if (embedField && embedField.value) {
+          links[task.name.trim()] = String(embedField.value).trim();
+        } else if (task.description) {
+          // Fallback if not in custom field
+          links[task.name.trim()] = task.description.trim();
         }
       });
 
@@ -76,7 +80,7 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
       }
 
       // 1. Check existing task
-      const listResponse = await fetch(`https://api.clickup.com/api/v2/list/${configListId}/task?archived=false`, {
+      const listResponse = await fetch(`https://api.clickup.com/api/v2/list/${configListId}/task?archived=false&include_closed=true`, {
         headers: { 'Authorization': apiToken }
       });
       
@@ -90,14 +94,28 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
       const existingTask = listData.tasks?.find((t: any) => t.name.toLowerCase() === clientName.toLowerCase());
 
       if (existingTask) {
-        // 2. Update existing task
+        // 2. Update existing task custom field
+        const customFieldId = '833454be-cd31-4eb6-9b9d-64496b2740d0';
+        const updateFieldResponse = await fetch(`https://api.clickup.com/api/v2/task/${existingTask.id}/field/${customFieldId}`, {
+          method: 'POST',
+          headers: { 
+            'Authorization': apiToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ value: link })
+        });
+
+        if (!updateFieldResponse.ok) {
+          console.warn(`ClickUp API Error (UPDATE FIELD): ${updateFieldResponse.status}`);
+        }
+
         const updateResponse = await fetch(`https://api.clickup.com/api/v2/task/${existingTask.id}`, {
           method: 'PUT',
           headers: { 
             'Authorization': apiToken,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ description: link })
+          body: JSON.stringify({ description: link }) // Also keep it in description as fallback
         });
 
         if (!updateResponse.ok) {
@@ -108,6 +126,7 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
 
       } else {
         // 3. Create new task
+        const customFieldId = '833454be-cd31-4eb6-9b9d-64496b2740d0';
         const createResponse = await fetch(`https://api.clickup.com/api/v2/list/${configListId}/task`, {
           method: 'POST',
           headers: { 
@@ -117,7 +136,13 @@ export default async function clientLinksHandler(req: IncomingMessage, res: Serv
           body: JSON.stringify({ 
             name: clientName, 
             description: link,
-            status: 'to do' // Changed from 'OPEN' to 'to do' which is more standard, or let ClickUp use default
+            status: 'to do',
+            custom_fields: [
+              {
+                id: customFieldId,
+                value: link
+              }
+            ]
           })
         });
 

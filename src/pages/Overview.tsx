@@ -35,10 +35,12 @@ export default function Overview() {
   }, [appliedDateRange, allTasks]);
 
   const calculateStats = () => {
-    const startDate = new Date(appliedDateRange.start).getTime();
-    // Set end date to the end of the day (23:59:59)
-    const endDate = new Date(appliedDateRange.end);
-    endDate.setHours(23, 59, 59, 999);
+    // Parse 'YYYY-MM-DD' as local time to avoid UTC offset issues
+    const [startYear, startMonth, startDay] = appliedDateRange.start.split('-').map(Number);
+    const startDate = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0).getTime();
+
+    const [endYear, endMonth, endDay] = appliedDateRange.end.split('-').map(Number);
+    const endDate = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
     const endDateMs = endDate.getTime();
 
     const newStats = [];

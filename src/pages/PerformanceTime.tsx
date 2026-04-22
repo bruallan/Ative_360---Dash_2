@@ -73,9 +73,12 @@ export default function PerformanceTime() {
       
       if (members.length === 0) return;
 
-      const startDate = new Date(appliedDateRange.start).getTime();
-      const endDate = new Date(appliedDateRange.end);
-      endDate.setHours(23, 59, 59, 999);
+      // Parse 'YYYY-MM-DD' as local time to avoid UTC offset issues
+      const [startYear, startMonth, startDay] = appliedDateRange.start.split('-').map(Number);
+      const startDate = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0).getTime();
+
+      const [endYear, endMonth, endDay] = appliedDateRange.end.split('-').map(Number);
+      const endDate = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
       const endDateMs = endDate.getTime();
 
       // 3. Process Data per Member
@@ -94,15 +97,19 @@ export default function PerformanceTime() {
         if (isAdvancedFilter) {
           const { createdStart, createdEnd, completedStart, completedEnd } = appliedAdvancedDateRange;
           if (createdStart && createdEnd) {
-            const cStart = new Date(createdStart).getTime();
-            const cEnd = new Date(createdEnd);
-            cEnd.setHours(23, 59, 59, 999);
+            const [cStartYear, cStartMonth, cStartDay] = createdStart.split('-').map(Number);
+            const cStart = new Date(cStartYear, cStartMonth - 1, cStartDay, 0, 0, 0, 0).getTime();
+            
+            const [cEndYear, cEndMonth, cEndDay] = createdEnd.split('-').map(Number);
+            const cEnd = new Date(cEndYear, cEndMonth - 1, cEndDay, 23, 59, 59, 999);
             filteredTasks = filteredTasks.filter((t: any) => isTaskCreatedInPeriod(t, cStart, cEnd.getTime()));
           }
           if (completedStart && completedEnd) {
-            const compStart = new Date(completedStart).getTime();
-            const compEnd = new Date(completedEnd);
-            compEnd.setHours(23, 59, 59, 999);
+            const [compStartYear, compStartMonth, compStartDay] = completedStart.split('-').map(Number);
+            const compStart = new Date(compStartYear, compStartMonth - 1, compStartDay, 0, 0, 0, 0).getTime();
+            
+            const [compEndYear, compEndMonth, compEndDay] = completedEnd.split('-').map(Number);
+            const compEnd = new Date(compEndYear, compEndMonth - 1, compEndDay, 23, 59, 59, 999);
             filteredTasks = filteredTasks.filter((t: any) => isTaskCompletedInPeriod(t, compStart, compEnd.getTime()));
           }
         } else {

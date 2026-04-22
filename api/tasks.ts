@@ -227,7 +227,10 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
         let dateCreatedLt = currentUrl.searchParams.get('date_created_lt');
         
         let finalUrl = `${teamTaskUrl}?page=${page}&subtasks=${includeSubtasks}&archived=${archived}&include_closed=true&date_created_gt=${dateCreatedGt}`;
-        if (spaceId) {
+        if (teamIdParam) {
+          // If fetching by team, restrict to Gestão and Operação space
+          finalUrl += `&space_ids[]=90133571157&space_ids[]=901310539280`;
+        } else if (spaceId) {
           finalUrl += `&space_ids[]=${spaceId}`;
         }
         if (dateCreatedLt) {

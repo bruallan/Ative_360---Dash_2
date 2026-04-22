@@ -121,15 +121,16 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any
   // First, delete existing chunks for this id to avoid stale data
   try {
     const existingDocs = await getDocs(collection(db, `cache_${type}_${id}`));
-    const deleteBatch = writeBatch(db);
-    existingDocs.forEach(d => deleteBatch.delete(d.ref));
-    await deleteBatch.commit();
+    for (const d of existingDocs.docs) {
+      await deleteDoc(d.ref);
+      await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to prevent RESOURCE_EXHAUSTED
+    }
   } catch (e) {
     console.error(`[Sync] Error deleting old chunks for ${type} ${id}:`, e);
   }
 
   // Dynamic chunking based on size
-  const maxBytes = 800000; // 800KB limit (Firestore is 1MB, leaving margin for overhead)
+  const maxBytes = 400000; // 400KB limit to prevent RESOURCE_EXHAUSTED
   const chunks: any[][] = [];
   let currentChunk: any[] = [];
   let currentSize = 0;
@@ -138,7 +139,7 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any
     const taskStr = JSON.stringify(task);
     const taskSize = taskStr.length; // Approximation of bytes
 
-    // If a single task is somehow still > 800KB, skip it with a warning
+    // If a single task is somehow still > 400KB, skip it with a warning
     if (taskSize > maxBytes) {
       console.warn(`[Sync] Task ${task.id} is too large (${taskSize} bytes) even after cleaning. Skipping.`);
       continue;
@@ -159,24 +160,17 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any
 
   console.log(`[Sync] Split into ${chunks.length} chunks.`);
 
-  // Use batches to save chunks (max 500 operations per batch)
-  // Firestore limit is 10MB per batch. Since each chunk is up to 800KB,
-  // we use a small batch size and a delay to prevent overwhelming the write stream.
-  const MAX_BATCH_SIZE = 2;
-  for (let i = 0; i < chunks.length; i += MAX_BATCH_SIZE) {
-    const batch = writeBatch(db);
-    const chunkSlice = chunks.slice(i, i + MAX_BATCH_SIZE);
+  // Write chunks one by one with a delay to prevent RESOURCE_EXHAUSTED
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const chunkRef = doc(db, `cache_${type}_${id}`, `chunk_${i}`);
     
-    chunkSlice.forEach((chunk, index) => {
-      const globalIndex = i + index;
-      const chunkRef = doc(db, `cache_${type}_${id}`, `chunk_${globalIndex}`);
-      batch.set(chunkRef, { data: JSON.stringify(chunk) });
-    });
+    console.log(`[Sync] Saving chunk ${i + 1}/${chunks.length}...`);
+    await setDoc(chunkRef, { data: JSON.stringify(chunk) });
     
-    if (chunkSlice.length > 0) {
-      await batch.commit();
-      // Add a 1-second delay between batches to prevent RESOURCE_EXHAUSTED
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    // Add a 3-second delay between chunks to prevent overwhelming the write stream
+    if (i < chunks.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
   }
 }
@@ -241,17 +235,18 @@ export async function runSync() {
       }
     }
 
-    // 3. Sync ALL Tasks in Team
-    console.log(`[Sync] Fetching ALL tasks for team ${teamId} via Team endpoint...`);
-    await updateSyncStatus('running', 30, `Buscando todas as tarefas do workspace...`);
+    // 3. Sync Tasks for Gestão and Operação spaces
+    console.log(`[Sync] Fetching tasks for spaces Gestão and Operação via Team endpoint...`);
+    await updateSyncStatus('running', 30, `Buscando tarefas de Gestão e Operação...`);
 
     if (!teamId) {
       throw new Error("Team ID not found, cannot fetch tasks.");
     }
 
     // Using 1500000000000 (July 2017) to ensure we get all historical tasks
-    // We remove space_ids[] to fetch from ALL spaces in the workspace
-    const teamTaskUrl = `https://api.clickup.com/api/v2/team/${teamId}/task?subtasks=true&include_closed=true&date_created_gt=1500000000000`;
+    const spaceGestao = CLICKUP_IDS.SPACE_GESTAO;
+    const spaceOperacao = CLICKUP_IDS.SPACE_OPERACAO;
+    const teamTaskUrl = `https://api.clickup.com/api/v2/team/${teamId}/task?space_ids[]=${spaceGestao}&space_ids[]=${spaceOperacao}&subtasks=true&include_closed=true&date_created_gt=1500000000000`;
     const allTeamTasks = await fetchAllPages(teamTaskUrl);
 
     await saveTasksInChunks(teamId, 'team', allTeamTasks);

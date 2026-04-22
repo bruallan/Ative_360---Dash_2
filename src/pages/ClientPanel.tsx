@@ -55,7 +55,10 @@ export default function ClientPanel() {
   useEffect(() => {
     if (selectedClient) {
       calculateStats();
-      setEmbedLink(clientLinks[selectedClient] || '');
+      
+      // Find link case-insensitively and trimmed
+      const clientKey = Object.keys(clientLinks).find(k => k.toLowerCase() === selectedClient.trim().toLowerCase());
+      setEmbedLink(clientKey ? clientLinks[clientKey] : '');
       setIsEditingLink(false);
     }
   }, [selectedClient, tasks, clientLinks, appliedDateRange]);
@@ -97,9 +100,12 @@ export default function ClientPanel() {
   };
 
   const calculateStats = () => {
-    const startDate = new Date(appliedDateRange.start).getTime();
-    const endDate = new Date(appliedDateRange.end);
-    endDate.setHours(23, 59, 59, 999);
+    // Parse 'YYYY-MM-DD' as local time to avoid UTC offset issues
+    const [startYear, startMonth, startDay] = appliedDateRange.start.split('-').map(Number);
+    const startDate = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0).getTime();
+
+    const [endYear, endMonth, endDay] = appliedDateRange.end.split('-').map(Number);
+    const endDate = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
     const endDateMs = endDate.getTime();
 
     const clientTasks = tasks.filter((task: any) => {
@@ -297,9 +303,9 @@ export default function ClientPanel() {
         ) : null}
 
         <div className="aspect-video w-full bg-slate-50 rounded-lg overflow-hidden border border-slate-100 relative">
-          {clientLinks[selectedClient] ? (
+          {embedLink && !isEditingLink ? (
             <iframe 
-              src={clientLinks[selectedClient]} 
+              src={embedLink} 
               frameBorder="0" 
               style={{ border: 0 }} 
               allowFullScreen 
