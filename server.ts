@@ -58,6 +58,27 @@ async function startServer() {
     res.json({ status: "Sync started in background" });
   });
 
+  app.post("/api/sync-reset", async (req, res) => {
+    try {
+      import('firebase-admin/app').then(async (admin) => {
+        const { getFirestore } = await import('firebase-admin/firestore');
+        if (!admin.getApps().length) {
+          const config = JSON.parse(fs.readFileSync('firebase-applet-config.json', 'utf8'));
+          admin.initializeApp({
+            credential: admin.applicationDefault(),
+            projectId: config.projectId
+          });
+        }
+        const config = JSON.parse(fs.readFileSync('firebase-applet-config.json', 'utf8'));
+        const db = getFirestore(admin.getApp(), config.firestoreDatabaseId);
+        await db.collection('cache').doc('sync_status').set({ status: 'idle', progress: 100, message: 'Reset executado (erro resolvido)', updatedAt: Date.now() });
+      });
+      res.json({ status: "Reset command sent" });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });

@@ -194,7 +194,7 @@ export default function Overview() {
           {loading && allTasks.length === 0 ? (
             <div className="h-full flex items-center justify-center text-slate-400">Carregando dados...</div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={300}>
               <BarChart data={stats}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" />

@@ -3,6 +3,40 @@ import { RefreshCw, AlertTriangle, X } from 'lucide-react';
 import { db } from '../firebase.ts';
 import { doc, onSnapshot } from 'firebase/firestore';
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: any;
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: null,
+      email: null,
+      emailVerified: null,
+      isAnonymous: null,
+      tenantId: null,
+      providerInfo: []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 export default function SyncManager() {
   const [syncStatus, setSyncStatus] = useState<{
     status: string;
@@ -14,16 +48,30 @@ export default function SyncManager() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isTriggering, setIsTriggering] = useState(false);
 
+  const [isResetting, setIsResetting] = useState(false);
+
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'cache', 'sync_status'), (doc) => {
       if (doc.exists()) {
         setSyncStatus(doc.data() as any);
       }
     }, (error) => {
-      console.warn("[SyncManager] Firestore snapshot error (likely quota):", error);
+      handleFirestoreError(error, OperationType.GET, 'cache/sync_status');
     });
     return () => unsub();
   }, []);
+
+  const handleReset = async () => {
+    setIsResetting(true);
+    try {
+      await fetch('/api/sync-reset', { method: 'POST' });
+    } catch (e) {
+      console.error("Failed to reset sync", e);
+    } finally {
+      setIsResetting(false);
+      setShowConfirm(false);
+    }
+  };
 
   const handleSync = async () => {
     setShowConfirm(false);
@@ -71,6 +119,13 @@ export default function SyncManager() {
            <span className="text-[10px] font-semibold text-red-600 uppercase tracking-wider">
              Sincronização interrompida (Timeout/Cota)
            </span>
+           <button 
+             onClick={handleReset}
+             disabled={isResetting}
+             className="text-[10px] bg-red-100 hover:bg-red-200 text-red-800 px-2 py-0.5 rounded transition-colors ml-2 font-medium"
+           >
+             {isResetting ? 'Limpando...' : 'Limpar Erro'}
+           </button>
         </div>
       )}
 

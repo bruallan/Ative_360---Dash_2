@@ -112,7 +112,7 @@ function cleanTask(task: any) {
   };
 }
 
-async function saveTasksInChunks(id: string, type: 'folder' | 'list', tasks: any[]) {
+async function saveTasksInChunks(id: string, type: 'folder' | 'list' | 'team' | 'space', tasks: any[]) {
   console.log(`[Sync] Saving ${tasks.length} tasks for ${type} ${id} in chunks...`);
   
   // Clean tasks before saving to reduce size

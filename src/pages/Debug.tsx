@@ -44,6 +44,19 @@ export default function Debug() {
           ))}
         </div>
       </div>
+
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <h3 className="text-lg font-semibold mb-4">Exportação Bruta do Banco de Dados / Raw Database Output</h3>
+        <p className="text-sm text-slate-500 mb-4">Foram encontradas {tasks.length} tarefas no banco.</p>
+        <div className="max-h-[600px] overflow-auto bg-slate-900 text-slate-300 p-4 rounded-lg font-mono text-xs">
+          <pre>{JSON.stringify({
+            status: loading ? 'Carregando dados do Firestore...' : 'Dados carregados com sucesso',
+            qtdTarefas: tasks.length,
+            qtdClientes: clients.length,
+            tarefas: tasks
+          }, null, 2)}</pre>
+        </div>
+      </div>
     </div>
   );
 }
