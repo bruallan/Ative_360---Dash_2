@@ -2,8 +2,6 @@ import { db } from './src/firebase';
 import { doc, setDoc, writeBatch, collection, getDocs, deleteDoc } from 'firebase/firestore';
 import { CLICKUP_IDS, SECTORS } from './src/constants';
 
-const apiToken = process.env.CLICKUP_API_TOKEN;
-
 async function updateSyncStatus(status: string, progress: number, message: string) {
   try {
     await setDoc(doc(db, 'cache', 'sync_status'), {
@@ -21,7 +19,7 @@ async function updateSyncStatus(status: string, progress: number, message: strin
   }
 }
 
-async function fetchAllPages(url: string) {
+async function fetchAllPages(url: string, apiToken: string) {
   let allItems: any[] = [];
   let page = 0;
   let hasMore = true;
@@ -34,7 +32,7 @@ async function fetchAllPages(url: string) {
       try {
         response = await fetch(pagedUrl, {
           headers: { 
-            "Authorization": apiToken!,
+            "Authorization": apiToken,
             "User-Agent": "Node.js/Fetch",
             "Connection": "keep-alive"
           }
@@ -176,6 +174,7 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list' | 'team' | 
 }
 
 export async function runSync() {
+  const apiToken = process.env.CLICKUP_API_TOKEN;
   if (!apiToken) {
     console.error("[Sync] CLICKUP_API_TOKEN not found. Skipping sync.");
     await updateSyncStatus('error', 0, 'CLICKUP_API_TOKEN not found');
@@ -192,14 +191,11 @@ export async function runSync() {
     const membersRes = await fetch("https://api.clickup.com/api/v2/team", {
       headers: { "Authorization": apiToken }
     });
-    let teamId = null;
+    let teamId = CLICKUP_IDS.TEAM_ID;
     if (membersRes.ok) {
       const membersData = await membersRes.json();
       await setDoc(doc(db, 'cache', 'members'), { data: JSON.stringify(membersData) });
       console.log("[Sync] Members synced.");
-      if (membersData.teams && membersData.teams.length > 0) {
-        teamId = membersData.teams[0].id;
-      }
     }
 
     // 2. Sync Hierarchy
@@ -247,7 +243,7 @@ export async function runSync() {
     const spaceGestao = CLICKUP_IDS.SPACE_GESTAO;
     const spaceOperacao = CLICKUP_IDS.SPACE_OPERACAO;
     const teamTaskUrl = `https://api.clickup.com/api/v2/team/${teamId}/task?space_ids[]=${spaceGestao}&space_ids[]=${spaceOperacao}&subtasks=true&include_closed=true&date_created_gt=1500000000000`;
-    const allTeamTasks = await fetchAllPages(teamTaskUrl);
+    const allTeamTasks = await fetchAllPages(teamTaskUrl, apiToken);
 
     await saveTasksInChunks(teamId, 'team', allTeamTasks);
 

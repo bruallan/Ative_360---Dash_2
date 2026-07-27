@@ -42,22 +42,14 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
     const now = Date.now();
     const quotaExceededUntil = (global as any).firebaseQuotaExceededUntil || 0;
 
+    let cacheSuccess = false;
     try {
       if (now < quotaExceededUntil) {
         throw new Error("Quota previously exceeded (Circuit Breaker active)");
       }
 
-      // If page > 0, return empty array because we fetch all tasks from Firebase at once
-      if (parseInt(page) > 0) {
-        res.end(JSON.stringify({ tasks: [] }));
-        return;
-      }
-
       let db: any = null;
       try {
-        // Dynamic import to prevent fatal crashes during Vercel serverless cold starts
-        // if firebase-applet-config.json is missing or causes ESM issues.
-        // In ESM, we often need the .js extension even for TS files after compilation.
         const firebaseModule = await import('../src/firebase.js');
         db = firebaseModule.db;
       } catch (importError) {
@@ -88,6 +80,53 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
 
       if (tasks.length === 0) {
         throw new Error("Cache empty");
+      }
+
+      // Delta Merge Logic
+      if (parseInt(page) === 0) {
+        let maxUpdated = 1500000000000;
+        tasks.forEach(t => {
+          if (t.date_updated) {
+            const d = parseInt(t.date_updated);
+            if (d > maxUpdated) maxUpdated = d;
+          }
+        });
+        
+        const apiToken = process.env.CLICKUP_API_TOKEN;
+        if (apiToken && (teamIdParam || spaceId)) {
+           const tId = teamIdParam || '9013412527';
+           console.log(`[API] Fetching delta updates from ClickUp since ${new Date(maxUpdated).toISOString()}`);
+           
+           let deltaPage = 0;
+           let deltaTasks = [];
+           while (true) {
+             const url = `https://api.clickup.com/api/v2/team/${tId}/task?space_ids[]=90133571157&space_ids[]=901310539280&subtasks=true&include_closed=true&date_updated_gt=${maxUpdated}&page=${deltaPage}`;
+             try {
+               const res = await fetch(url, { headers: { Authorization: apiToken } });
+               if (!res.ok) break;
+               const data = await res.json();
+               if (!data.tasks || data.tasks.length === 0) break;
+               deltaTasks.push(...data.tasks);
+               deltaPage++;
+             } catch (e) {
+               console.error("[API] Delta fetch error:", e);
+               break;
+             }
+           }
+           console.log(`[API] Fetched ${deltaTasks.length} updated tasks`);
+           
+           if (deltaTasks.length > 0) {
+             const taskMap = new Map();
+             tasks.forEach(t => taskMap.set(t.id, t));
+             deltaTasks.forEach(t => taskMap.set(t.id, t));
+             tasks = Array.from(taskMap.values());
+           }
+        }
+        cacheSuccess = true;
+      } else {
+        cacheSuccess = true;
+        res.end(JSON.stringify({ tasks: [] }));
+        return;
       }
     } catch (firebaseError: any) {
       const isQuotaError = 
