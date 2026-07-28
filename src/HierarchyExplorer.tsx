@@ -12,7 +12,7 @@ export default function HierarchyExplorer() {
         // First get team ID
         const membersRes = await fetch('/api/members');
         const membersData = await membersRes.json();
-        const teamId = membersData.teams?.[0]?.id;
+        const teamId = membersData.teams?.find((t: any) => String(t.id) === '9013412527')?.id || membersData.teams?.[0]?.id;
 
         if (!teamId) throw new Error("No team found");
 

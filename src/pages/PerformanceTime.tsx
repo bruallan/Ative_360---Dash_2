@@ -69,7 +69,8 @@ export default function PerformanceTime() {
       // 1. Fetch Members
       const membersRes = await fetch('/api/members');
       const membersData = await membersRes.json();
-      const members = membersData.teams?.[0]?.members?.map((m: any) => m.user) || [];
+      const targetTeam = membersData.teams?.find((t: any) => String(t.id) === '9013412527') || membersData.teams?.[0];
+      const members = targetTeam?.members?.map((m: any) => m.user) || [];
       
       if (members.length === 0) return;
 

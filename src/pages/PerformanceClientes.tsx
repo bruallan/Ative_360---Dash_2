@@ -96,10 +96,12 @@ export default function PerformanceClientes() {
           return clientName === client;
         });
 
-        let todo = 0;
-        let active = 0;
-        let completed = 0;
-        let overdue = 0;
+        let stats = {
+          todo: { task: 0, subtask: 0 },
+          active: { task: 0, subtask: 0 },
+          completed: { task: 0, subtask: 0 },
+          overdue: { task: 0, subtask: 0 }
+        };
 
         let filteredTasks = memberTasks;
 
@@ -129,6 +131,8 @@ export default function PerformanceClientes() {
           const status = t.status?.status?.toLowerCase() || '';
           const isCompletedStatus = ['entregue', 'complete', 'closed'].includes(status);
           const isTodoStatus = ['a fazer', 'to do', 'open'].includes(status);
+          const isSubtask = !!t.parent;
+          const type = isSubtask ? 'subtask' : 'task';
           
           let isCompleted = isCompletedStatus;
           if (!isAdvancedFilter && isCompletedStatus) {
@@ -136,7 +140,7 @@ export default function PerformanceClientes() {
           }
 
           if (isCompleted) {
-            completed++;
+            stats.completed[type]++;
             return;
           }
 
@@ -145,11 +149,11 @@ export default function PerformanceClientes() {
           const isOverdue = due ? due < referenceDate : false;
 
           if (isOverdue) {
-            overdue++;
+            stats.overdue[type]++;
           } else if (isTodoStatus) {
-            todo++;
+            stats.todo[type]++;
           } else {
-            active++;
+            stats.active[type]++;
           }
         });
 
@@ -159,7 +163,7 @@ export default function PerformanceClientes() {
           initials: client ? client.substring(0, 2).toUpperCase() : 'NA',
           profilePicture: null,
           color: '#e2e8f0', // default gray color
-          stats: { todo, active, completed, overdue },
+          stats,
           tasks: memberTasks
         };
       });
@@ -357,63 +361,85 @@ export default function PerformanceClientes() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-4">
-              <div className="w-24 h-24 relative">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={[
-                        { name: 'A Fazer', value: member.stats.todo },
-                        { name: 'Ativas', value: member.stats.active },
-                        { name: 'Concluídas', value: member.stats.completed },
-                        { name: 'Atrasadas', value: member.stats.overdue }
-                      ]}
-                      innerRadius={30}
-                      outerRadius={40}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      <Cell fill={COLORS.todo} />
-                      <Cell fill={COLORS.active} />
-                      <Cell fill={COLORS.completed} />
-                      <Cell fill={COLORS.overdue} />
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="absolute inset-0 flex items-center justify-center flex-col">
-                  <span className="text-xs text-slate-400">Total</span>
-                  <span className="font-bold text-slate-700">{member.stats.todo + member.stats.active + member.stats.completed + member.stats.overdue}</span>
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-24 h-24 relative flex-shrink-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'A Fazer', value: member.stats.todo.task + member.stats.todo.subtask },
+                          { name: 'Ativas', value: member.stats.active.task + member.stats.active.subtask },
+                          { name: 'Concluídas', value: member.stats.completed.task + member.stats.completed.subtask },
+                          { name: 'Atrasadas', value: member.stats.overdue.task + member.stats.overdue.subtask }
+                        ]}
+                        innerRadius={25}
+                        outerRadius={35}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        <Cell fill={COLORS.todo} />
+                        <Cell fill={COLORS.active} />
+                        <Cell fill={COLORS.completed} />
+                        <Cell fill={COLORS.overdue} />
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex items-center justify-center flex-col">
+                    <span className="text-[10px] text-slate-400 leading-none">Total</span>
+                    <span className="font-bold text-sm text-slate-700 leading-none mt-1">
+                      {(member.stats.todo.task + member.stats.todo.subtask) + 
+                       (member.stats.active.task + member.stats.active.subtask) + 
+                       (member.stats.completed.task + member.stats.completed.subtask) + 
+                       (member.stats.overdue.task + member.stats.overdue.subtask)}
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex-1 space-y-2 text-sm">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.todo }} />
-                    <span className="text-slate-600">A Fazer</span>
-                  </div>
-                  <span className="font-bold text-slate-900">{member.stats.todo}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.active }} />
-                    <span className="text-slate-600">Ativas</span>
-                  </div>
-                  <span className="font-bold text-slate-900">{member.stats.active}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.completed }} />
-                    <span className="text-slate-600">Concluídas</span>
-                  </div>
-                  <span className="font-bold text-slate-900">{member.stats.completed}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.overdue }} />
-                    <span className="text-slate-600">Atrasadas</span>
-                  </div>
-                  <span className="font-bold text-red-500">{member.stats.overdue}</span>
+                <div className="flex-1 overflow-x-auto">
+                  <table className="w-full text-xs text-left text-slate-500">
+                    <thead className="text-[10px] uppercase bg-slate-50 text-slate-400">
+                      <tr>
+                        <th className="px-2 py-1 rounded-l-md">Status</th>
+                        <th className="px-2 py-1 text-center">Tarefa</th>
+                        <th className="px-2 py-1 text-center rounded-r-md">Subtar.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-slate-50 last:border-0">
+                        <td className="px-2 py-1.5 flex items-center gap-1.5 whitespace-nowrap">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.todo }} />
+                          A Fazer
+                        </td>
+                        <td className="px-2 py-1.5 text-center font-medium text-slate-700">{member.stats.todo.task}</td>
+                        <td className="px-2 py-1.5 text-center font-medium text-slate-700">{member.stats.todo.subtask}</td>
+                      </tr>
+                      <tr className="border-b border-slate-50 last:border-0">
+                        <td className="px-2 py-1.5 flex items-center gap-1.5 whitespace-nowrap">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.active }} />
+                          Ativas
+                        </td>
+                        <td className="px-2 py-1.5 text-center font-medium text-slate-700">{member.stats.active.task}</td>
+                        <td className="px-2 py-1.5 text-center font-medium text-slate-700">{member.stats.active.subtask}</td>
+                      </tr>
+                      <tr className="border-b border-slate-50 last:border-0">
+                        <td className="px-2 py-1.5 flex items-center gap-1.5 whitespace-nowrap">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.completed }} />
+                          Concluídas
+                        </td>
+                        <td className="px-2 py-1.5 text-center font-medium text-slate-700">{member.stats.completed.task}</td>
+                        <td className="px-2 py-1.5 text-center font-medium text-slate-700">{member.stats.completed.subtask}</td>
+                      </tr>
+                      <tr>
+                        <td className="px-2 py-1.5 flex items-center gap-1.5 whitespace-nowrap">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.overdue }} />
+                          Atrasadas
+                        </td>
+                        <td className="px-2 py-1.5 text-center font-medium text-red-500">{member.stats.overdue.task}</td>
+                        <td className="px-2 py-1.5 text-center font-medium text-red-500">{member.stats.overdue.subtask}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>

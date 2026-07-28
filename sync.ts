@@ -67,7 +67,7 @@ async function fetchAllPages(url: string, apiToken: string) {
 
 function cleanTask(task: any) {
   // Only keep the fields we actually use in the UI to save space
-  return {
+  return { parent: task.parent,
     id: task.id,
     name: task.name,
     status: task.status ? {
@@ -128,7 +128,7 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list' | 'team' | 
   }
 
   // Dynamic chunking based on size
-  const maxBytes = 400000; // 400KB limit to prevent RESOURCE_EXHAUSTED
+  const maxBytes = 150000; // 400KB limit to prevent RESOURCE_EXHAUSTED
   const chunks: any[][] = [];
   let currentChunk: any[] = [];
   let currentSize = 0;
@@ -164,7 +164,19 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list' | 'team' | 
     const chunkRef = doc(db, `cache_${type}_${id}`, `chunk_${i}`);
     
     console.log(`[Sync] Saving chunk ${i + 1}/${chunks.length}...`);
-    await setDoc(chunkRef, { data: JSON.stringify(chunk) });
+    let success = false;
+    let retries = 5;
+    while (!success && retries > 0) {
+      try {
+        await setDoc(chunkRef, { data: JSON.stringify(chunk) });
+        success = true;
+      } catch (err) {
+        console.warn(`[Sync] Chunk ${i} write failed. Retrying...`);
+        retries--;
+        await new Promise(res => setTimeout(res, 10000));
+        if (retries === 0) throw err;
+      }
+    }
     
     // Add a 3-second delay between chunks to prevent overwhelming the write stream
     if (i < chunks.length - 1) {
