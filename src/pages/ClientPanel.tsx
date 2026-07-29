@@ -112,14 +112,21 @@ export default function ClientPanel() {
       const clientField = task.custom_fields?.find((f: any) => f.name === 'Cliente');
       if (!clientField || (clientField.value === undefined || clientField.value === null)) return false;
       
-      let clientName = '';
+      let clientNames: string[] = [];
       if (clientField.type === 'drop_down') {
-         const option = clientField.type_config?.options?.find((o: any) => o.orderindex === clientField.value);
-         if (option) clientName = String(option.name);
+         const option = clientField.type_config?.options?.find((o: any) => String(o.orderindex) === String(clientField.value) || String(o.id) === String(clientField.value));
+         if (option) clientNames.push(String(option.name));
+      } else if (clientField.type === 'labels') {
+         if (Array.isArray(clientField.value)) {
+             clientField.value.forEach((val: string) => {
+                 const option = clientField.type_config?.options?.find((o: any) => String(o.id) === String(val));
+                 if (option) clientNames.push(String(option.label || option.name));
+             });
+         }
       } else if (clientField.value) {
-         clientName = String(clientField.value);
+         clientNames.push(String(clientField.value));
       }
-      return clientName === selectedClient;
+      return clientNames.includes(selectedClient);
     });
 
     const newStats = SECTORS.map(sector => {
@@ -208,7 +215,7 @@ export default function ClientPanel() {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <h3 className="text-lg font-semibold mb-6">Status por Setor: {selectedClient}</h3>
         <div className="h-[400px]">
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={300} minWidth={0} minHeight={0}>
             <BarChart data={stats}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" />

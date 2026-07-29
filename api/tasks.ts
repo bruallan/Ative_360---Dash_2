@@ -58,7 +58,7 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
       }
 
       console.log(`[API] Fetching tasks for ${type} ${id} from Firebase...`);
-      const querySnapshot = await getDocs(collection(db, `cache_${type}_${id}`));
+      const querySnapshot = await getDocs(collection(db, `cache_v2_${type}_${id}`));
       
       querySnapshot.forEach(doc => {
         const docData = doc.data();
@@ -165,7 +165,10 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
         const finalUrl = `${url}?${params.toString()}`;
         console.log(`[API] Fetching tasks from ClickUp: ${finalUrl}`);
         
-        const response = await fetch(finalUrl, {
+        let retries = 5;
+        let response;
+        while (retries > 0) {
+          response = await fetch(finalUrl, {
           headers: { 
             "Authorization": apiToken,
             "User-Agent": "Node.js/Fetch",
@@ -173,9 +176,21 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
           }
         });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`ClickUp API Error ${response.status}: ${errorText}`);
+        if (response.status === 429) {
+            console.warn("[API] ClickUp Rate Limit reached in fallback. Retrying...");
+            retries--;
+            await new Promise(r => setTimeout(r, 6000));
+            continue;
+          }
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`ClickUp API Error ${response.status}: ${errorText}`);
+          }
+          break;
+        }
+        
+        if (!response || !response.ok) {
+           throw new Error("Failed to fetch from ClickUp after retries");
         }
 
         const data = await response.json();
@@ -278,17 +293,31 @@ export default async function tasksHandler(req: IncomingMessage, res: ServerResp
 
         console.log(`[API] Fetching tasks from ClickUp Team endpoint: ${finalUrl}`);
         
-        const response = await fetch(finalUrl, {
-          headers: { 
-            "Authorization": apiToken,
-            "User-Agent": "Node.js/Fetch",
-            "Connection": "keep-alive"
+        let retries = 5;
+        let response;
+        while (retries > 0) {
+          response = await fetch(finalUrl, {
+            headers: { 
+              "Authorization": apiToken,
+              "User-Agent": "Node.js/Fetch",
+              "Connection": "keep-alive"
+            }
+          });
+          if (response.status === 429) {
+            console.warn("[API] ClickUp Rate Limit reached in fallback. Retrying...");
+            retries--;
+            await new Promise(r => setTimeout(r, 10000));
+            continue;
           }
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`ClickUp API Error ${response.status}: ${errorText}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`ClickUp API Error ${response.status}: ${errorText}`);
+          }
+          break;
+        }
+        
+        if (!response || !response.ok) {
+           throw new Error("Failed to fetch from ClickUp after retries");
         }
 
         const data = await response.json();

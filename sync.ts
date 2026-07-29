@@ -118,7 +118,7 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list' | 'team' | 
   
   // First, delete existing chunks for this id to avoid stale data
   try {
-    const existingDocs = await getDocs(collection(db, `cache_${type}_${id}`));
+    const existingDocs = await getDocs(collection(db, `cache_v2_${type}_${id}`));
     for (const d of existingDocs.docs) {
       await deleteDoc(d.ref);
       await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to prevent RESOURCE_EXHAUSTED
@@ -161,7 +161,7 @@ async function saveTasksInChunks(id: string, type: 'folder' | 'list' | 'team' | 
   // Write chunks one by one with a delay to prevent RESOURCE_EXHAUSTED
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    const chunkRef = doc(db, `cache_${type}_${id}`, `chunk_${i}`);
+    const chunkRef = doc(db, `cache_v2_${type}_${id}`, `chunk_${i}`);
     
     console.log(`[Sync] Saving chunk ${i + 1}/${chunks.length}...`);
     let success = false;
@@ -256,6 +256,33 @@ export async function runSync() {
     const spaceOperacao = CLICKUP_IDS.SPACE_OPERACAO;
     const teamTaskUrl = `https://api.clickup.com/api/v2/team/${teamId}/task?space_ids[]=${spaceGestao}&space_ids[]=${spaceOperacao}&subtasks=true&include_closed=true&date_created_gt=1500000000000`;
     const allTeamTasks = await fetchAllPages(teamTaskUrl, apiToken);
+
+    // Apply parent-to-subtask inheritance for the "Cliente" custom field
+    const taskMap = new Map();
+    allTeamTasks.forEach(t => taskMap.set(t.id, t));
+
+    let changed = true;
+    let iterations = 0;
+    while (changed && iterations < 5) {
+      changed = false;
+      iterations++;
+      for (const t of allTeamTasks) {
+        if (t.parent) {
+          const parentTask = taskMap.get(t.parent);
+          if (parentTask) {
+            const parentClientField = parentTask.custom_fields?.find(f => f.name === 'Cliente');
+            const myClientField = t.custom_fields?.find(f => f.name === 'Cliente');
+            
+            if (parentClientField && (!myClientField || myClientField.value === undefined || myClientField.value === null)) {
+              if (!t.custom_fields) t.custom_fields = [];
+              t.custom_fields = t.custom_fields.filter(f => f.name !== 'Cliente');
+              t.custom_fields.push(JSON.parse(JSON.stringify(parentClientField)));
+              changed = true;
+            }
+          }
+        }
+      }
+    }
 
     await saveTasksInChunks(teamId, 'team', allTeamTasks);
 

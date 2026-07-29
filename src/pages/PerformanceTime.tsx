@@ -347,7 +347,7 @@ export default function PerformanceTime() {
 
             <div className="flex items-center justify-between gap-4">
               <div className="w-24 h-24 relative">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <PieChart>
                     <Pie
                       data={[
